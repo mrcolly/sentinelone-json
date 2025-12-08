@@ -1822,12 +1822,28 @@
     return result;
   }
   function findEventPropertiesSection() {
-    const $headings = (0, import_cash_dom.default)('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"]');
+    const $headings = (0, import_cash_dom.default)('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"], span[class*="heading"], span[class*="title"]');
     let $section = null;
     $headings.each(function() {
-      if ((0, import_cash_dom.default)(this).text().trim() === "Event properties") {
-        $section = (0, import_cash_dom.default)(this).closest('div[class*="section"], section');
-        if (!$section.length) {
+      const text = (0, import_cash_dom.default)(this).text().trim();
+      if (text === "Event properties") {
+        let $container = (0, import_cash_dom.default)(this).parent();
+        while ($container.length && !$container.is("body")) {
+          const classes = $container.attr("class") || "";
+          if (classes.includes("Shell") || classes.includes("Layout_container")) {
+            break;
+          }
+          const $props = $container.find("div").filter(function() {
+            const text2 = (0, import_cash_dom.default)(this).text();
+            return text2.match(/^[a-z]+\.[a-z_]+\.[a-z_]+$/);
+          });
+          if ($props.length > 5) {
+            $section = $container;
+            return false;
+          }
+          $container = $container.parent();
+        }
+        if (!$section || !$section.length) {
           $section = (0, import_cash_dom.default)(this).parent();
         }
         return false;
@@ -1837,11 +1853,27 @@
       return $section;
     }
     let $found = null;
-    (0, import_cash_dom.default)("div").each(function() {
-      const text = (0, import_cash_dom.default)(this).text();
-      if (text.includes("log.meta.") || text.includes("source.c2c.")) {
-        $found = (0, import_cash_dom.default)(this);
-        return false;
+    let maxProps = 0;
+    (0, import_cash_dom.default)("div[class], section[class]").each(function() {
+      const $container = (0, import_cash_dom.default)(this);
+      const classes = $container.attr("class") || "";
+      if (classes.includes("Shell") || classes.includes("Layout_container") || classes.includes("App")) {
+        return;
+      }
+      const $children = $container.children();
+      let propCount = 0;
+      $children.each(function() {
+        const $child = (0, import_cash_dom.default)(this);
+        if ($child.children().length === 2) {
+          const key = $child.children().eq(0).text().trim();
+          if (key.match(/^[a-z]+\.[a-z_.]+$/)) {
+            propCount++;
+          }
+        }
+      });
+      if (propCount > maxProps && propCount > 3) {
+        maxProps = propCount;
+        $found = $container;
       }
     });
     return $found;
@@ -1887,6 +1919,31 @@
   }
   function extractProperties($container) {
     const properties = {};
+    const $content = $container.find('div[class*="collapsible-content"]');
+    if ($content.length) {
+      const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
+      $propertyWrappers.each(function() {
+        const $wrapper = (0, import_cash_dom.default)(this);
+        const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
+        if ($innerDiv.length) {
+          const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
+          const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
+          if ($labelWrapper.length && $valueWrapper.length) {
+            const key = $labelWrapper.text().trim();
+            const value = $valueWrapper.text().trim();
+            if (isValidPropertyKey(key)) {
+              const cleanedValue = cleanPropertyValue(value);
+              if (cleanedValue) {
+                properties[key] = cleanedValue;
+              }
+            }
+          }
+        }
+      });
+      if (Object.keys(properties).length > 0) {
+        return properties;
+      }
+    }
     const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
     $rows.each(function() {
       const $row = (0, import_cash_dom.default)(this);

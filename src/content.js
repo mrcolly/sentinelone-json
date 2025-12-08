@@ -134,17 +134,43 @@ function convertToNestedObject(flatObj) {
 
 function findEventPropertiesSection() {
   // Look for "Event properties" heading
-  const $headings = $('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"]');
+  const $headings = $('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"], span[class*="heading"], span[class*="title"]');
   
   let $section = null;
   
   $headings.each(function() {
-    if ($(this).text().trim() === 'Event properties') {
-      // Return the parent container
-      $section = $(this).closest('div[class*="section"], section');
-      if (!$section.length) {
+    const text = $(this).text().trim();
+    
+    if (text === 'Event properties') {
+      // Try to find the container with the properties
+      let $container = $(this).parent();
+      
+      // Try to find a more specific container (not the whole page)
+      while ($container.length && !$container.is('body')) {
+        const classes = $container.attr('class') || '';
+        // Skip if it's the main shell/layout container
+        if (classes.includes('Shell') || classes.includes('Layout_container')) {
+          break;
+        }
+        // Look for a container that has property rows inside
+        const $props = $container.find('div').filter(function() {
+          const text = $(this).text();
+          return text.match(/^[a-z]+\.[a-z_]+\.[a-z_]+$/);
+        });
+        
+        if ($props.length > 5) {
+          $section = $container;
+          return false;
+        }
+        
+        $container = $container.parent();
+      }
+      
+      // If we didn't find a good container, use the immediate parent
+      if (!$section || !$section.length) {
         $section = $(this).parent();
       }
+      
       return false; // Break loop
     }
   });
@@ -153,13 +179,39 @@ function findEventPropertiesSection() {
     return $section;
   }
   
-  // Alternative: look for elements containing property-like patterns
+  // Alternative: look for a container with many property-like elements
+  // but NOT the main shell container
   let $found = null;
-  $('div').each(function() {
-    const text = $(this).text();
-    if (text.includes('log.meta.') || text.includes('source.c2c.')) {
-      $found = $(this);
-      return false; // Break
+  let maxProps = 0;
+  
+  $('div[class], section[class]').each(function() {
+    const $container = $(this);
+    const classes = $container.attr('class') || '';
+    
+    // Skip main layout containers
+    if (classes.includes('Shell') || 
+        classes.includes('Layout_container') ||
+        classes.includes('App')) {
+      return; // Continue
+    }
+    
+    // Count how many property-like direct children it has
+    const $children = $container.children();
+    let propCount = 0;
+    
+    $children.each(function() {
+      const $child = $(this);
+      if ($child.children().length === 2) {
+        const key = $child.children().eq(0).text().trim();
+        if (key.match(/^[a-z]+\.[a-z_.]+$/)) {
+          propCount++;
+        }
+      }
+    });
+    
+    if (propCount > maxProps && propCount > 3) {
+      maxProps = propCount;
+      $found = $container;
     }
   });
   
@@ -199,7 +251,7 @@ function isValidPropertyKey(key) {
   if (key.match(/[\u{1F000}-\u{1F9FF}]/u)) return false;
   
   // Skip keys with quotes (log message attributes)
-  if (key.includes("'") || key.includes('"')) return false;
+  if (key.includes('\'') || key.includes('"')) return false;
   
   // Skip header-like text
   if (key.includes('Event properties') || 
@@ -241,7 +293,42 @@ function cleanPropertyValue(value) {
 function extractProperties($container) {
   const properties = {};
   
-  // Try multiple strategies to extract key-value pairs
+  // Find the collapsible content div (where properties actually are)
+  const $content = $container.find('div[class*="collapsible-content"]');
+  
+  if ($content.length) {
+    // EXTRACT: Find all property wrappers and extract key-value pairs
+    const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
+    
+    $propertyWrappers.each(function() {
+      const $wrapper = $(this);
+      const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
+      
+      if ($innerDiv.length) {
+        const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
+        const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
+        
+        if ($labelWrapper.length && $valueWrapper.length) {
+          const key = $labelWrapper.text().trim();
+          const value = $valueWrapper.text().trim();
+          
+          if (isValidPropertyKey(key)) {
+            const cleanedValue = cleanPropertyValue(value);
+            if (cleanedValue) {
+              properties[key] = cleanedValue;
+            }
+          }
+        }
+      }
+    });
+    
+    // If we found properties, return them now
+    if (Object.keys(properties).length > 0) {
+      return properties;
+    }
+  }
+  
+  // Otherwise fall back to old strategies
   
   // Strategy 1: Look for paired elements (common in modern web apps)
   const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
