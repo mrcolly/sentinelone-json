@@ -1812,7 +1812,12 @@
   function convertToNestedObject(flatObj) {
     const result = {};
     Object.entries(flatObj).forEach(([key, value]) => {
-      set_default(result, key, value);
+      if (key.includes("..."))
+        return;
+      const cleanKey = key.split(".").filter((segment) => segment.trim().length > 0).join(".");
+      if (cleanKey && cleanKey.length > 0) {
+        set_default(result, cleanKey, value);
+      }
     });
     return result;
   }
@@ -1841,6 +1846,45 @@
     });
     return $found;
   }
+  function isValidPropertyKey(key) {
+    if (!key || key.length < 2)
+      return false;
+    if (key.includes("See as JSON") || key.includes("See in ") || key.includes("Collapse") || key.includes("Search")) {
+      return false;
+    }
+    if (key.includes("..."))
+      return false;
+    if (key.includes("|") || key.includes("PM") || key.includes("AM") || key.match(/\d{1,2}:\d{2}:\d{2}/)) {
+      return false;
+    }
+    if (key.includes("="))
+      return false;
+    if (key.match(/[\u{1F000}-\u{1F9FF}]/u))
+      return false;
+    if (key.includes("'") || key.includes('"'))
+      return false;
+    if (key.includes("Event properties") || key.includes("Event Time")) {
+      return false;
+    }
+    if (!key.includes(".") && !key.includes("_"))
+      return false;
+    if (key.length > 150)
+      return false;
+    const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
+    if (specialChars > 3)
+      return false;
+    return true;
+  }
+  function cleanPropertyValue(value) {
+    if (!value)
+      return null;
+    const cleaned = value.trim();
+    if (cleaned.length > 1e3)
+      return null;
+    if (cleaned.includes("|") && cleaned.length > 100)
+      return null;
+    return cleaned;
+  }
   function extractProperties($container) {
     const properties = {};
     const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
@@ -1850,16 +1894,22 @@
       if ($children.length === 2) {
         const key = $children.eq(0).text().trim();
         const value = $children.eq(1).text().trim();
-        if (key && value && key.length < 200) {
-          properties[key] = value;
+        if (isValidPropertyKey(key)) {
+          const cleanedValue = cleanPropertyValue(value);
+          if (cleanedValue) {
+            properties[key] = cleanedValue;
+          }
         }
       } else if ($children.length > 0) {
         const $spans = $row.find("span, div, td");
         if ($spans.length >= 2) {
           const key = $spans.eq(0).text().trim();
           const value = $spans.eq(1).text().trim();
-          if (key && value && (key.includes(".") || key.includes("_"))) {
-            properties[key] = value;
+          if (isValidPropertyKey(key)) {
+            const cleanedValue = cleanPropertyValue(value);
+            if (cleanedValue) {
+              properties[key] = cleanedValue;
+            }
           }
         }
       }
@@ -1870,9 +1920,14 @@
       for (let i = 0; i < lines.length - 1; ) {
         const key = lines[i].trim();
         const value = lines[i + 1].trim();
-        if ((key.includes(".") || key.includes("_")) && key.length < 100 && value.length < 500 && !key.includes("Event properties") && !key.includes("Search")) {
-          properties[key] = value;
-          i += 2;
+        if (isValidPropertyKey(key)) {
+          const cleanedValue = cleanPropertyValue(value);
+          if (cleanedValue) {
+            properties[key] = cleanedValue;
+            i += 2;
+          } else {
+            i++;
+          }
         } else {
           i++;
         }

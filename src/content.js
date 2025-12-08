@@ -114,7 +114,19 @@ function convertToNestedObject(flatObj) {
   const result = {};
   
   Object.entries(flatObj).forEach(([key, value]) => {
-    set(result, key, value);
+    // Skip keys with ellipsis (truncated UI text)
+    if (key.includes('...')) return;
+    
+    // Clean the key - remove any empty segments
+    const cleanKey = key
+      .split('.')
+      .filter(segment => segment.trim().length > 0)
+      .join('.');
+    
+    // Only add if we have a valid key after cleaning
+    if (cleanKey && cleanKey.length > 0) {
+      set(result, cleanKey, value);
+    }
   });
   
   return result;
@@ -154,6 +166,78 @@ function findEventPropertiesSection() {
   return $found;
 }
 
+/**
+ * Checks if a key is a valid property name (not UI text or log format)
+ */
+function isValidPropertyKey(key) {
+  // Skip empty or very short keys
+  if (!key || key.length < 2) return false;
+  
+  // Skip UI elements and buttons
+  if (key.includes('See as JSON') || 
+      key.includes('See in ') ||
+      key.includes('Collapse') ||
+      key.includes('Search')) {
+    return false;
+  }
+  
+  // Skip truncated text with ellipsis (UI abbreviation)
+  if (key.includes('...')) return false;
+  
+  // Skip log message formats with pipes and datetime stamps
+  if (key.includes('|') || 
+      key.includes('PM') || 
+      key.includes('AM') ||
+      key.match(/\d{1,2}:\d{2}:\d{2}/)) { // Time pattern
+    return false;
+  }
+  
+  // Skip keys with equals signs (log format)
+  if (key.includes('=')) return false;
+  
+  // Skip keys with emojis (log messages)
+  if (key.match(/[\u{1F000}-\u{1F9FF}]/u)) return false;
+  
+  // Skip keys with quotes (log message attributes)
+  if (key.includes("'") || key.includes('"')) return false;
+  
+  // Skip header-like text
+  if (key.includes('Event properties') || 
+      key.includes('Event Time')) {
+    return false;
+  }
+  
+  // Must contain dot or underscore (property naming convention)
+  if (!key.includes('.') && !key.includes('_')) return false;
+  
+  // Must be reasonable length
+  if (key.length > 150) return false;
+  
+  // Should look like a property path (alphanumeric, dots, underscores, hyphens)
+  // Allow some special chars but not too many
+  const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
+  if (specialChars > 3) return false;
+  
+  return true;
+}
+
+/**
+ * Cleans and validates a property value
+ */
+function cleanPropertyValue(value) {
+  if (!value) return null;
+  
+  const cleaned = value.trim();
+  
+  // Skip very long values (likely corrupted data)
+  if (cleaned.length > 1000) return null;
+  
+  // Skip values that look like they contain full log lines
+  if (cleaned.includes('|') && cleaned.length > 100) return null;
+  
+  return cleaned;
+}
+
 function extractProperties($container) {
   const properties = {};
   
@@ -170,8 +254,12 @@ function extractProperties($container) {
     if ($children.length === 2) {
       const key = $children.eq(0).text().trim();
       const value = $children.eq(1).text().trim();
-      if (key && value && key.length < 200) {
-        properties[key] = value;
+      
+      if (isValidPropertyKey(key)) {
+        const cleanedValue = cleanPropertyValue(value);
+        if (cleanedValue) {
+          properties[key] = cleanedValue;
+        }
       }
     }
     // Try to extract from text content with patterns like "key value"
@@ -180,8 +268,12 @@ function extractProperties($container) {
       if ($spans.length >= 2) {
         const key = $spans.eq(0).text().trim();
         const value = $spans.eq(1).text().trim();
-        if (key && value && (key.includes('.') || key.includes('_'))) {
-          properties[key] = value;
+        
+        if (isValidPropertyKey(key)) {
+          const cleanedValue = cleanPropertyValue(value);
+          if (cleanedValue) {
+            properties[key] = cleanedValue;
+          }
         }
       }
     }
@@ -196,14 +288,14 @@ function extractProperties($container) {
       const key = lines[i].trim();
       const value = lines[i + 1].trim();
       
-      // Look for property-like keys
-      if ((key.includes('.') || key.includes('_')) && 
-          key.length < 100 && 
-          value.length < 500 &&
-          !key.includes('Event properties') &&
-          !key.includes('Search')) {
-        properties[key] = value;
-        i += 2; // Skip both key and value lines
+      if (isValidPropertyKey(key)) {
+        const cleanedValue = cleanPropertyValue(value);
+        if (cleanedValue) {
+          properties[key] = cleanedValue;
+          i += 2; // Skip both key and value lines
+        } else {
+          i++;
+        }
       } else {
         i++;
       }
