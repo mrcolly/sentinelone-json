@@ -33,7 +33,7 @@ function checkAndInjectButton() {
       const text = btn.textContent.trim();
       if (text === 'See in Original Log') hasOriginalLog = true;
       if (text === 'See in Thread Log') hasThreadLog = true;
-      if (text === 'See as JSON') hasJsonButton = true;
+      if (text === 'See as JSON' || btn.dataset.s1JsonButton === 'true') hasJsonButton = true;
     });
     
     // If we found both buttons and haven't added our button yet
@@ -49,6 +49,7 @@ function injectJsonButton(container) {
   const jsonButton = document.createElement('button');
   jsonButton.textContent = 'See as JSON';
   jsonButton.className = 's1-json-viewer-button';
+  jsonButton.dataset.s1JsonButton = 'true'; // Mark button to prevent duplicates
   
   // Try to match the styling of existing buttons
   const existingButton = container.querySelector('button');
@@ -94,10 +95,39 @@ function extractAndShowJSON() {
   
   // Extract all property rows
   const properties = extractProperties(propertiesSection);
-  eventData.properties = properties;
+  
+  // Convert flat properties to nested structure
+  const nestedProperties = convertToNestedObject(properties);
+  eventData.properties = nestedProperties;
   
   // Show JSON in modal
   displayJSONModal(eventData);
+}
+
+function convertToNestedObject(flatObj) {
+  const result = {};
+  
+  for (const [key, value] of Object.entries(flatObj)) {
+    const parts = key.split('.');
+    let current = result;
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      
+      if (i === parts.length - 1) {
+        // Last part, set the value
+        current[part] = value;
+      } else {
+        // Create nested object if it doesn't exist
+        if (!current[part] || typeof current[part] !== 'object') {
+          current[part] = {};
+        }
+        current = current[part];
+      }
+    }
+  }
+  
+  return result;
 }
 
 function findEventPropertiesSection() {
