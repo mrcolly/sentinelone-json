@@ -22,26 +22,40 @@ function init() {
 }
 
 function checkAndInjectButton() {
-  // Look for the button container with "See in Original Log" and "See in Thread Log"
-  $('div, header').each(function() {
-    const $container = $(this);
-    const $buttons = $container.find('button');
+  // Look for button groups that contain "See in Original Log" and "See in Thread Log"
+  // Check if container is already processed
+  $('button').each(function() {
+    const $btn = $(this);
+    const text = $btn.text().trim();
     
-    let hasOriginalLog = false;
-    let hasThreadLog = false;
-    let hasJsonButton = false;
-    
-    $buttons.each(function() {
-      const text = $(this).text().trim();
-      if (text === 'See in Original Log') hasOriginalLog = true;
-      if (text === 'See in Thread Log') hasThreadLog = true;
-      if (text === 'See as JSON' || this.dataset.s1JsonButton === 'true') hasJsonButton = true;
-    });
-    
-    // If we found both buttons and haven't added our button yet
-    if (hasOriginalLog && hasThreadLog && !hasJsonButton) {
-      injectJsonButton(this);
-      return false; // Break the loop
+    // Found a "See in Thread Log" button
+    if (text === 'See in Thread Log') {
+      const $container = $btn.parent();
+      
+      // Skip if already processed
+      if ($container.attr('data-s1-json-processed') === 'true') {
+        return; // Continue to next
+      }
+      
+      // Check if siblings include required buttons
+      const $siblings = $container.find('button');
+      let hasOriginalLog = false;
+      let hasThreadLog = false;
+      let hasJsonButton = false;
+      
+      $siblings.each(function() {
+        const siblingText = $(this).text().trim();
+        if (siblingText === 'See in Original Log') hasOriginalLog = true;
+        if (siblingText === 'See in Thread Log') hasThreadLog = true;
+        if (siblingText === 'See as JSON' || this.dataset.s1JsonButton === 'true') hasJsonButton = true;
+      });
+      
+      // If we have both required buttons and no JSON button, inject it
+      if (hasOriginalLog && hasThreadLog && !hasJsonButton) {
+        $container.attr('data-s1-json-processed', 'true');
+        injectJsonButton($container.get(0));
+        return false; // Break the loop
+      }
     }
   });
 }

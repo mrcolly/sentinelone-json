@@ -1751,24 +1751,32 @@
     checkAndInjectButton();
   }
   function checkAndInjectButton() {
-    (0, import_cash_dom.default)("div, header").each(function() {
-      const $container = (0, import_cash_dom.default)(this);
-      const $buttons = $container.find("button");
-      let hasOriginalLog = false;
-      let hasThreadLog = false;
-      let hasJsonButton = false;
-      $buttons.each(function() {
-        const text = (0, import_cash_dom.default)(this).text().trim();
-        if (text === "See in Original Log")
-          hasOriginalLog = true;
-        if (text === "See in Thread Log")
-          hasThreadLog = true;
-        if (text === "See as JSON" || this.dataset.s1JsonButton === "true")
-          hasJsonButton = true;
-      });
-      if (hasOriginalLog && hasThreadLog && !hasJsonButton) {
-        injectJsonButton(this);
-        return false;
+    (0, import_cash_dom.default)("button").each(function() {
+      const $btn = (0, import_cash_dom.default)(this);
+      const text = $btn.text().trim();
+      if (text === "See in Thread Log") {
+        const $container = $btn.parent();
+        if ($container.attr("data-s1-json-processed") === "true") {
+          return;
+        }
+        const $siblings = $container.find("button");
+        let hasOriginalLog = false;
+        let hasThreadLog = false;
+        let hasJsonButton = false;
+        $siblings.each(function() {
+          const siblingText = (0, import_cash_dom.default)(this).text().trim();
+          if (siblingText === "See in Original Log")
+            hasOriginalLog = true;
+          if (siblingText === "See in Thread Log")
+            hasThreadLog = true;
+          if (siblingText === "See as JSON" || this.dataset.s1JsonButton === "true")
+            hasJsonButton = true;
+        });
+        if (hasOriginalLog && hasThreadLog && !hasJsonButton) {
+          $container.attr("data-s1-json-processed", "true");
+          injectJsonButton($container.get(0));
+          return false;
+        }
       }
     });
   }
