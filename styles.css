@@ -1,0 +1,170 @@
+/* SentinelOne JSON Viewer Styles */
+
+/* Button styling - matches SentinelOne's design */
+.s1-json-viewer-button {
+  margin-left: 8px !important;
+}
+
+/* Modal overlay */
+.s1-json-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99999;
+  backdrop-filter: blur(4px);
+}
+
+/* Modal content */
+.s1-json-modal-content {
+  background: #1e1e1e;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+/* Modal header */
+.s1-json-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #333;
+  background: #252525;
+}
+
+.s1-json-modal-header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.s1-json-modal-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 32px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.s1-json-modal-close:hover {
+  background: #333;
+  color: #fff;
+}
+
+/* JSON container */
+.s1-json-container {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background: #1e1e1e;
+}
+
+.s1-json-pre {
+  margin: 0;
+  background: #0d1117;
+  border-radius: 6px;
+  padding: 20px;
+  overflow: auto;
+  border: 1px solid #30363d;
+}
+
+.s1-json-pre code {
+  color: #c9d1d9;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre;
+  display: block;
+}
+
+/* Button container */
+.s1-json-button-container {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #333;
+  background: #252525;
+}
+
+.s1-json-copy-btn,
+.s1-json-download-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.s1-json-copy-btn {
+  background: #6366f1;
+  color: white;
+}
+
+.s1-json-copy-btn:hover {
+  background: #5558e3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.s1-json-download-btn {
+  background: #10b981;
+  color: white;
+}
+
+.s1-json-download-btn:hover {
+  background: #0ea572;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.s1-json-copy-btn:active,
+.s1-json-download-btn:active {
+  transform: translateY(0);
+}
+
+/* Scrollbar styling for modal */
+.s1-json-container::-webkit-scrollbar,
+.s1-json-pre::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.s1-json-container::-webkit-scrollbar-track,
+.s1-json-pre::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.s1-json-container::-webkit-scrollbar-thumb,
+.s1-json-pre::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 5px;
+}
+
+.s1-json-container::-webkit-scrollbar-thumb:hover,
+.s1-json-pre::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

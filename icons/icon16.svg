@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <!-- Purple background -->
+  <rect width="16" height="16" fill="#6366f1" rx="2"/>
+  
+  <!-- Left curly brace -->
+  <path d="M 6 2 
+           L 2 2
+           L 2 14
+           L 6 14"
+        stroke="white" stroke-width="2" 
+        fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Right curly brace -->
+  <path d="M 10 2
+           L 14 2
+           L 14 14
+           L 10 14"
+        stroke="white" stroke-width="2" 
+        fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Optional: Add "JS" or "JSON" text for larger icons -->
+  
+</svg>

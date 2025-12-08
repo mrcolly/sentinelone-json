@@ -1,0 +1,28 @@
+{
+  "name": "sentinelone-json-viewer",
+  "version": "1.0.0",
+  "description": "Chrome extension to view SentinelOne event logs in JSON format",
+  "scripts": {
+    "lint": "npm run lint:js && npm run lint:css",
+    "lint:js": "eslint content.js",
+    "lint:css": "stylelint styles.css",
+    "lint:fix": "eslint content.js --fix && stylelint styles.css --fix",
+    "format": "prettier --write \"**/*.{js,css,json,md}\"",
+    "validate": "npm run lint && echo '✅ All checks passed!'"
+  },
+  "keywords": [
+    "chrome-extension",
+    "sentinelone",
+    "json-viewer",
+    "security",
+    "logs"
+  ],
+  "author": "Alessio Colombo",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.56.0",
+    "stylelint": "^16.1.0",
+    "stylelint-config-standard": "^36.0.0",
+    "prettier": "^3.1.1"
+  }
+}
