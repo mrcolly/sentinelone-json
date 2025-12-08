@@ -1,0 +1,9 @@
+# Built files
+/build/
+
+# Dependencies
+node_modules/
+
+# Temporary
+*.tmp
+

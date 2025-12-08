@@ -3,11 +3,14 @@ node_modules/
 package-lock.json
 yarn.lock
 
-# Build outputs (don't ignore content.js - it's the bundled output)
+# Build outputs
 dist/
 *.crx
 *.pem
 *.zip
+
+# Don't ignore build/ directory - contains bundled extension files
+# build/
 
 # IDE
 .vscode/

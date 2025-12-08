@@ -1,12 +1,11 @@
 import esbuild from 'esbuild';
-import { readFileSync } from 'fs';
 
 const isWatch = process.argv.includes('--watch');
 
 const config = {
   entryPoints: ['src/content.js'],
   bundle: true,
-  outfile: 'content.js',
+  outfile: 'build/content.js',
   format: 'iife',
   target: 'chrome90',
   minify: false, // Keep readable for debugging, set to true for production
@@ -25,4 +24,3 @@ if (isWatch) {
   await esbuild.build(config);
   console.log('✅ Build complete!');
 }
-

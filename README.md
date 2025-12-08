@@ -13,7 +13,7 @@ A Chrome extension that adds a "See as JSON" button to SentinelOne event logs, a
 
 ## Development Setup
 
-This extension uses NPM packages for cleaner code. You'll need to build it first:
+This extension uses NPM packages (cash-dom, lodash-es) for cleaner code. You'll need to build it first:
 
 ```bash
 # Install dependencies
@@ -26,7 +26,7 @@ npm run build
 npm run watch
 ```
 
-See [BUILD.md](BUILD.md) for detailed build instructions and [NPM_PACKAGES.md](NPM_PACKAGES.md) for package details.
+See [BUILD.md](BUILD.md) for detailed build instructions.
 
 ## Installation
 
@@ -35,30 +35,27 @@ See [BUILD.md](BUILD.md) for detailed build instructions and [NPM_PACKAGES.md](N
 
 ### Option 2: Install as Unpacked Extension (Developer Mode)
 
-1. **Download the extension files**
-   - Clone or download this repository
+1. **Clone the repository and build**
+   ```bash
+   git clone <repository-url>
+   cd sentinelone-json
+   npm install
+   npm run build
+   ```
 
-2. **Create extension icons** (required)
-   - Create an `icons` folder in the extension directory
-   - Add three PNG icon files:
-     - `icon16.png` (16x16 pixels)
-     - `icon48.png` (48x48 pixels)
-     - `icon128.png` (128x128 pixels)
-   - You can use any icon or create a simple JSON-themed icon
-
-3. **Open Chrome Extensions page**
+2. **Open Chrome Extensions page**
    - Open Chrome and navigate to `chrome://extensions/`
    - Or click: Menu (⋮) → More Tools → Extensions
 
-4. **Enable Developer Mode**
+3. **Enable Developer Mode**
    - Toggle the "Developer mode" switch in the top-right corner
 
-5. **Load the extension**
+4. **Load the extension**
    - Click "Load unpacked"
    - Select the `sentinelone-json` folder
    - The extension should now appear in your extensions list
 
-6. **Verify installation**
+5. **Verify installation**
    - The extension icon should appear in your Chrome toolbar
    - Navigate to SentinelOne and open an event to test
 
@@ -84,13 +81,20 @@ See [BUILD.md](BUILD.md) for detailed build instructions and [NPM_PACKAGES.md](N
 
 ```
 sentinelone-json/
+├── src/
+│   └── content.js      # Source code (with NPM imports)
+├── build/
+│   └── content.js      # Built/bundled file (used by extension)
 ├── manifest.json       # Extension configuration
-├── content.js          # Main logic for button injection and JSON extraction
 ├── styles.css          # Styling for button and modal
-├── icons/              # Extension icons (you need to create these)
-│   ├── icon16.png
-│   ├── icon48.png
-│   └── icon128.png
+├── build.js            # esbuild configuration
+├── package.json        # NPM dependencies
+├── icons/              # Extension icons
+│   ├── icon16.svg/.png
+│   ├── icon48.svg/.png
+│   └── icon128.svg/.png
+├── BUILD.md            # Build instructions
+├── INSTALL.md          # Installation guide
 └── README.md           # This file
 ```
 
@@ -115,10 +119,11 @@ sentinelone-json/
 - Try scrolling through the event properties first
 
 ### Extension not loading
+- Make sure you ran `npm install` and `npm run build`
 - Check that Developer Mode is enabled
 - Verify all files are in the correct location
 - Check the Chrome Extensions page for error messages
-- Make sure you've created the required icon files
+- Look for build errors in the terminal
 
 ## Privacy & Security
 

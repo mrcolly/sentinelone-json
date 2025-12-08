@@ -12,7 +12,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgb(0 0 0 / 70%);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -29,7 +29,7 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
   overflow: hidden;
 }
 
@@ -91,7 +91,7 @@
 
 .s1-json-pre code {
   color: #c9d1d9;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, source-code-pro, monospace;
   font-size: 14px;
   line-height: 1.6;
   white-space: pre;
@@ -127,7 +127,7 @@
 .s1-json-copy-btn:hover {
   background: #5558e3;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 12px rgb(99 102 241 / 30%);
 }
 
 .s1-json-download-btn {
@@ -138,7 +138,7 @@
 .s1-json-download-btn:hover {
   background: #0ea572;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 4px 12px rgb(16 185 129 / 30%);
 }
 
 .s1-json-copy-btn:active,

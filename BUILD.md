@@ -26,8 +26,8 @@ npm run dev
 
 ### What Gets Built
 
-- **Source:** `src/content.js` (imports lodash-es)
-- **Output:** `content.js` (bundled, ready for Chrome)
+- **Source:** `src/content.js` (imports cash-dom, lodash-es)
+- **Output:** `build/content.js` (bundled, ready for Chrome)
 
 ## Project Structure
 
@@ -35,19 +35,21 @@ npm run dev
 sentinelone-json/
 ├── src/
 │   └── content.js          # Source file with imports
-├── content.js              # Built/bundled file (used by extension)
+├── build/
+│   └── content.js          # Built/bundled file (used by extension)
 ├── build.js                # esbuild configuration
 ├── package.json            # Dependencies & scripts
-└── manifest.json           # Points to built content.js
+└── manifest.json           # Points to build/content.js
 ```
 
 ## NPM Packages Used
 
 ### Dependencies
+- **cash-dom** - Lightweight jQuery alternative for DOM manipulation (~6KB gzipped)
 - **lodash-es** - Utility library (we use `set` for nested objects)
 
 ### Dev Dependencies
-- **esbuild** - Fast JavaScript bundler
+- **esbuild** - Fast JavaScript bundler (~30ms build time)
 - **eslint** - JavaScript linter
 - **stylelint** - CSS linter
 - **prettier** - Code formatter
@@ -57,7 +59,8 @@ sentinelone-json/
 ### Benefits
 ✅ Use NPM packages in content scripts  
 ✅ Cleaner code with battle-tested utilities  
-✅ Fast builds with esbuild (~10ms)  
+✅ jQuery-like DOM manipulation with cash-dom  
+✅ Fast builds with esbuild (~30ms)  
 ✅ Modern ES6 imports  
 ✅ Better code organization  
 
@@ -87,4 +90,3 @@ If you prefer zero dependencies:
 - Use the original `content.js` from git history
 - No build step needed
 - Slightly more code but no tooling required
-

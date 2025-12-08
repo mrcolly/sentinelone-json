@@ -11,7 +11,7 @@
       "matches": [
         "https://*.sentinelone.net/*"
       ],
-      "js": ["content.js"],
+      "js": ["build/content.js"],
       "css": ["styles.css"],
       "run_at": "document_end"
     }
