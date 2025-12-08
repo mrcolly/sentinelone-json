@@ -1794,7 +1794,7 @@
   function extractAndShowJSON() {
     const eventData = {};
     const $propertiesSection = findEventPropertiesSection();
-    if (!$propertiesSection || !$propertiesSection.length) {
+    if (!($propertiesSection == null ? void 0 : $propertiesSection.length)) {
       alert("Could not find event properties. Please make sure an event is open.");
       return;
     }
@@ -1833,9 +1833,10 @@
           if (classes.includes("Shell") || classes.includes("Layout_container")) {
             break;
           }
+          const propertyRegex = /^[a-z]+\.[a-z_]+\.[a-z_]+$/;
           const $props = $container.find("div").filter(function() {
             const text2 = (0, import_cash_dom.default)(this).text();
-            return text2.match(/^[a-z]+\.[a-z_]+\.[a-z_]+$/);
+            return propertyRegex.test(text2);
           });
           if ($props.length > 5) {
             $section = $container;
@@ -1843,13 +1844,13 @@
           }
           $container = $container.parent();
         }
-        if (!$section || !$section.length) {
+        if (!($section == null ? void 0 : $section.length)) {
           $section = (0, import_cash_dom.default)(this).parent();
         }
         return false;
       }
     });
-    if ($section && $section.length) {
+    if ($section == null ? void 0 : $section.length) {
       return $section;
     }
     let $found = null;
@@ -1862,11 +1863,12 @@
       }
       const $children = $container.children();
       let propCount = 0;
+      const propertyKeyRegex = /^[a-z]+\.[a-z_.]+$/;
       $children.each(function() {
         const $child = (0, import_cash_dom.default)(this);
         if ($child.children().length === 2) {
           const key = $child.children().eq(0).text().trim();
-          if (key.match(/^[a-z]+\.[a-z_.]+$/)) {
+          if (propertyKeyRegex.test(key)) {
             propCount++;
           }
         }
@@ -1878,34 +1880,25 @@
     });
     return $found;
   }
+  function isUIElement(key) {
+    return key.includes("See as JSON") || key.includes("See in ") || key.includes("Collapse") || key.includes("Search") || key.includes("Event properties") || key.includes("Event Time");
+  }
+  function isLogFormat(key) {
+    const timePattern = /\d{1,2}:\d{2}:\d{2}/;
+    return key.includes("|") || key.includes("PM") || key.includes("AM") || key.includes("=") || key.includes("'") || key.includes('"') || key.includes("...") || timePattern.test(key);
+  }
   function isValidPropertyKey(key) {
-    if (!key || key.length < 2)
+    if (!key || key.length < 2 || key.length > 150)
       return false;
-    if (key.includes("See as JSON") || key.includes("See in ") || key.includes("Collapse") || key.includes("Search")) {
-      return false;
-    }
-    if (key.includes("..."))
-      return false;
-    if (key.includes("|") || key.includes("PM") || key.includes("AM") || key.match(/\d{1,2}:\d{2}:\d{2}/)) {
-      return false;
-    }
-    if (key.includes("="))
-      return false;
-    if (key.match(/[\u{1F000}-\u{1F9FF}]/u))
-      return false;
-    if (key.includes("'") || key.includes('"'))
-      return false;
-    if (key.includes("Event properties") || key.includes("Event Time")) {
-      return false;
-    }
     if (!key.includes(".") && !key.includes("_"))
       return false;
-    if (key.length > 150)
+    if (isUIElement(key) || isLogFormat(key))
+      return false;
+    const emojiPattern = /[\u{1F000}-\u{1F9FF}]/u;
+    if (emojiPattern.test(key))
       return false;
     const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
-    if (specialChars > 3)
-      return false;
-    return true;
+    return specialChars <= 3;
   }
   function cleanPropertyValue(value) {
     if (!value)
@@ -1917,51 +1910,18 @@
       return null;
     return cleaned;
   }
-  function extractProperties($container) {
+  function extractFromPropertyWrappers($content) {
     const properties = {};
-    const $content = $container.find('div[class*="collapsible-content"]');
-    if ($content.length) {
-      const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
-      $propertyWrappers.each(function() {
-        const $wrapper = (0, import_cash_dom.default)(this);
-        const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
-        if ($innerDiv.length) {
-          const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
-          const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
-          if ($labelWrapper.length && $valueWrapper.length) {
-            const key = $labelWrapper.text().trim();
-            const value = $valueWrapper.text().trim();
-            if (isValidPropertyKey(key)) {
-              const cleanedValue = cleanPropertyValue(value);
-              if (cleanedValue) {
-                properties[key] = cleanedValue;
-              }
-            }
-          }
-        }
-      });
-      if (Object.keys(properties).length > 0) {
-        return properties;
-      }
-    }
-    const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
-    $rows.each(function() {
-      const $row = (0, import_cash_dom.default)(this);
-      const $children = $row.children();
-      if ($children.length === 2) {
-        const key = $children.eq(0).text().trim();
-        const value = $children.eq(1).text().trim();
-        if (isValidPropertyKey(key)) {
-          const cleanedValue = cleanPropertyValue(value);
-          if (cleanedValue) {
-            properties[key] = cleanedValue;
-          }
-        }
-      } else if ($children.length > 0) {
-        const $spans = $row.find("span, div, td");
-        if ($spans.length >= 2) {
-          const key = $spans.eq(0).text().trim();
-          const value = $spans.eq(1).text().trim();
+    const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
+    $propertyWrappers.each(function() {
+      const $wrapper = (0, import_cash_dom.default)(this);
+      const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
+      if ($innerDiv.length) {
+        const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
+        const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
+        if ($labelWrapper.length && $valueWrapper.length) {
+          const key = $labelWrapper.text().trim();
+          const value = $valueWrapper.text().trim();
           if (isValidPropertyKey(key)) {
             const cleanedValue = cleanPropertyValue(value);
             if (cleanedValue) {
@@ -1971,26 +1931,76 @@
         }
       }
     });
-    if (Object.keys(properties).length === 0) {
-      const text = $container.text();
-      const lines = text.split("\n").filter((line) => line.trim());
-      for (let i = 0; i < lines.length - 1; ) {
-        const key = lines[i].trim();
-        const value = lines[i + 1].trim();
-        if (isValidPropertyKey(key)) {
-          const cleanedValue = cleanPropertyValue(value);
-          if (cleanedValue) {
-            properties[key] = cleanedValue;
-            i += 2;
-          } else {
-            i++;
-          }
-        } else {
-          i++;
+    return properties;
+  }
+  function extractFromTwoChildren($children, properties) {
+    const key = $children.eq(0).text().trim();
+    const value = $children.eq(1).text().trim();
+    if (isValidPropertyKey(key)) {
+      const cleanedValue = cleanPropertyValue(value);
+      if (cleanedValue) {
+        properties[key] = cleanedValue;
+      }
+    }
+  }
+  function extractFromSpans($row, properties) {
+    const $spans = $row.find("span, div, td");
+    if ($spans.length >= 2) {
+      const key = $spans.eq(0).text().trim();
+      const value = $spans.eq(1).text().trim();
+      if (isValidPropertyKey(key)) {
+        const cleanedValue = cleanPropertyValue(value);
+        if (cleanedValue) {
+          properties[key] = cleanedValue;
         }
       }
     }
+  }
+  function extractFromGenericStructure($container) {
+    const properties = {};
+    const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
+    $rows.each(function() {
+      const $row = (0, import_cash_dom.default)(this);
+      const $children = $row.children();
+      if ($children.length === 2) {
+        extractFromTwoChildren($children, properties);
+      } else if ($children.length > 0) {
+        extractFromSpans($row, properties);
+      }
+    });
     return properties;
+  }
+  function extractProperties($container) {
+    const $content = $container.find('div[class*="collapsible-content"]');
+    if ($content.length) {
+      const properties2 = extractFromPropertyWrappers($content);
+      if (Object.keys(properties2).length > 0) {
+        return properties2;
+      }
+    }
+    const properties = extractFromGenericStructure($container);
+    if (Object.keys(properties).length > 0) {
+      return properties;
+    }
+    const textProperties = {};
+    const text = $container.text();
+    const lines = text.split("\n").filter((line) => line.trim());
+    for (let i = 0; i < lines.length - 1; ) {
+      const key = lines[i].trim();
+      const value = lines[i + 1].trim();
+      if (isValidPropertyKey(key)) {
+        const cleanedValue = cleanPropertyValue(value);
+        if (cleanedValue) {
+          textProperties[key] = cleanedValue;
+          i += 2;
+        } else {
+          i++;
+        }
+      } else {
+        i++;
+      }
+    }
+    return textProperties;
   }
   function displayJSONModal(data) {
     const $existing = (0, import_cash_dom.default)("#s1-json-modal");

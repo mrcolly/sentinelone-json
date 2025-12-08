@@ -82,7 +82,7 @@ function extractAndShowJSON() {
   // Find the Event properties section
   const $propertiesSection = findEventPropertiesSection();
   
-  if (!$propertiesSection || !$propertiesSection.length) {
+  if (!$propertiesSection?.length) {
     alert('Could not find event properties. Please make sure an event is open.');
     return;
   }
@@ -153,9 +153,10 @@ function findEventPropertiesSection() {
           break;
         }
         // Look for a container that has property rows inside
+        const propertyRegex = /^[a-z]+\.[a-z_]+\.[a-z_]+$/;
         const $props = $container.find('div').filter(function() {
           const text = $(this).text();
-          return text.match(/^[a-z]+\.[a-z_]+\.[a-z_]+$/);
+          return propertyRegex.test(text);
         });
         
         if ($props.length > 5) {
@@ -167,7 +168,7 @@ function findEventPropertiesSection() {
       }
       
       // If we didn't find a good container, use the immediate parent
-      if (!$section || !$section.length) {
+      if (!$section?.length) {
         $section = $(this).parent();
       }
       
@@ -175,7 +176,7 @@ function findEventPropertiesSection() {
     }
   });
   
-  if ($section && $section.length) {
+  if ($section?.length) {
     return $section;
   }
   
@@ -199,11 +200,12 @@ function findEventPropertiesSection() {
     const $children = $container.children();
     let propCount = 0;
     
+    const propertyKeyRegex = /^[a-z]+\.[a-z_.]+$/;
     $children.each(function() {
       const $child = $(this);
       if ($child.children().length === 2) {
         const key = $child.children().eq(0).text().trim();
-        if (key.match(/^[a-z]+\.[a-z_.]+$/)) {
+        if (propertyKeyRegex.test(key)) {
           propCount++;
         }
       }
@@ -219,58 +221,52 @@ function findEventPropertiesSection() {
 }
 
 /**
+ * Check if key contains UI-related text
+ */
+function isUIElement(key) {
+  return key.includes('See as JSON') || 
+         key.includes('See in ') ||
+         key.includes('Collapse') ||
+         key.includes('Search') ||
+         key.includes('Event properties') ||
+         key.includes('Event Time');
+}
+
+/**
+ * Check if key contains log format characters
+ */
+function isLogFormat(key) {
+  const timePattern = /\d{1,2}:\d{2}:\d{2}/;
+  return key.includes('|') || 
+         key.includes('PM') || 
+         key.includes('AM') ||
+         key.includes('=') ||
+         key.includes('\'') ||
+         key.includes('"') ||
+         key.includes('...') ||
+         timePattern.test(key);
+}
+
+/**
  * Checks if a key is a valid property name (not UI text or log format)
  */
 function isValidPropertyKey(key) {
-  // Skip empty or very short keys
-  if (!key || key.length < 2) return false;
-  
-  // Skip UI elements and buttons
-  if (key.includes('See as JSON') || 
-      key.includes('See in ') ||
-      key.includes('Collapse') ||
-      key.includes('Search')) {
-    return false;
-  }
-  
-  // Skip truncated text with ellipsis (UI abbreviation)
-  if (key.includes('...')) return false;
-  
-  // Skip log message formats with pipes and datetime stamps
-  if (key.includes('|') || 
-      key.includes('PM') || 
-      key.includes('AM') ||
-      key.match(/\d{1,2}:\d{2}:\d{2}/)) { // Time pattern
-    return false;
-  }
-  
-  // Skip keys with equals signs (log format)
-  if (key.includes('=')) return false;
-  
-  // Skip keys with emojis (log messages)
-  if (key.match(/[\u{1F000}-\u{1F9FF}]/u)) return false;
-  
-  // Skip keys with quotes (log message attributes)
-  if (key.includes('\'') || key.includes('"')) return false;
-  
-  // Skip header-like text
-  if (key.includes('Event properties') || 
-      key.includes('Event Time')) {
-    return false;
-  }
+  // Basic validation
+  if (!key || key.length < 2 || key.length > 150) return false;
   
   // Must contain dot or underscore (property naming convention)
   if (!key.includes('.') && !key.includes('_')) return false;
   
-  // Must be reasonable length
-  if (key.length > 150) return false;
+  // Skip UI elements and log formats
+  if (isUIElement(key) || isLogFormat(key)) return false;
+  
+  // Skip keys with emojis (log messages)
+  const emojiPattern = /[\u{1F000}-\u{1F9FF}]/u;
+  if (emojiPattern.test(key)) return false;
   
   // Should look like a property path (alphanumeric, dots, underscores, hyphens)
-  // Allow some special chars but not too many
   const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
-  if (specialChars > 3) return false;
-  
-  return true;
+  return specialChars <= 3;
 }
 
 /**
@@ -290,71 +286,24 @@ function cleanPropertyValue(value) {
   return cleaned;
 }
 
-function extractProperties($container) {
+/**
+ * Extract properties from SentinelOne's property wrapper structure
+ */
+function extractFromPropertyWrappers($content) {
   const properties = {};
+  const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
   
-  // Find the collapsible content div (where properties actually are)
-  const $content = $container.find('div[class*="collapsible-content"]');
-  
-  if ($content.length) {
-    // EXTRACT: Find all property wrappers and extract key-value pairs
-    const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
+  $propertyWrappers.each(function() {
+    const $wrapper = $(this);
+    const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
     
-    $propertyWrappers.each(function() {
-      const $wrapper = $(this);
-      const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
+    if ($innerDiv.length) {
+      const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
+      const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
       
-      if ($innerDiv.length) {
-        const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
-        const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
-        
-        if ($labelWrapper.length && $valueWrapper.length) {
-          const key = $labelWrapper.text().trim();
-          const value = $valueWrapper.text().trim();
-          
-          if (isValidPropertyKey(key)) {
-            const cleanedValue = cleanPropertyValue(value);
-            if (cleanedValue) {
-              properties[key] = cleanedValue;
-            }
-          }
-        }
-      }
-    });
-    
-    // If we found properties, return them now
-    if (Object.keys(properties).length > 0) {
-      return properties;
-    }
-  }
-  
-  // Otherwise fall back to old strategies
-  
-  // Strategy 1: Look for paired elements (common in modern web apps)
-  const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
-  
-  $rows.each(function() {
-    const $row = $(this);
-    const $children = $row.children();
-    
-    // If row has exactly 2 children, they might be key-value
-    if ($children.length === 2) {
-      const key = $children.eq(0).text().trim();
-      const value = $children.eq(1).text().trim();
-      
-      if (isValidPropertyKey(key)) {
-        const cleanedValue = cleanPropertyValue(value);
-        if (cleanedValue) {
-          properties[key] = cleanedValue;
-        }
-      }
-    }
-    // Try to extract from text content with patterns like "key value"
-    else if ($children.length > 0) {
-      const $spans = $row.find('span, div, td');
-      if ($spans.length >= 2) {
-        const key = $spans.eq(0).text().trim();
-        const value = $spans.eq(1).text().trim();
+      if ($labelWrapper.length && $valueWrapper.length) {
+        const key = $labelWrapper.text().trim();
+        const value = $valueWrapper.text().trim();
         
         if (isValidPropertyKey(key)) {
           const cleanedValue = cleanPropertyValue(value);
@@ -366,30 +315,103 @@ function extractProperties($container) {
     }
   });
   
-  // Strategy 2: If no properties found, try to parse visible text
-  if (Object.keys(properties).length === 0) {
-    const text = $container.text();
-    const lines = text.split('\n').filter(line => line.trim());
+  return properties;
+}
+
+/**
+ * Try to extract key-value from a row with 2 children
+ */
+function extractFromTwoChildren($children, properties) {
+  const key = $children.eq(0).text().trim();
+  const value = $children.eq(1).text().trim();
+  
+  if (isValidPropertyKey(key)) {
+    const cleanedValue = cleanPropertyValue(value);
+    if (cleanedValue) {
+      properties[key] = cleanedValue;
+    }
+  }
+}
+
+/**
+ * Try to extract key-value from spans/divs inside a row
+ */
+function extractFromSpans($row, properties) {
+  const $spans = $row.find('span, div, td');
+  if ($spans.length >= 2) {
+    const key = $spans.eq(0).text().trim();
+    const value = $spans.eq(1).text().trim();
     
-    for (let i = 0; i < lines.length - 1;) {
-      const key = lines[i].trim();
-      const value = lines[i + 1].trim();
-      
-      if (isValidPropertyKey(key)) {
-        const cleanedValue = cleanPropertyValue(value);
-        if (cleanedValue) {
-          properties[key] = cleanedValue;
-          i += 2; // Skip both key and value lines
-        } else {
-          i++;
-        }
-      } else {
-        i++;
+    if (isValidPropertyKey(key)) {
+      const cleanedValue = cleanPropertyValue(value);
+      if (cleanedValue) {
+        properties[key] = cleanedValue;
       }
     }
   }
+}
+
+/**
+ * Fallback extraction for generic DOM structures
+ */
+function extractFromGenericStructure($container) {
+  const properties = {};
+  const $rows = $container.find('div[class*="row"], tr, li, div[class*="property"], div[class*="item"]');
+  
+  $rows.each(function() {
+    const $row = $(this);
+    const $children = $row.children();
+    
+    if ($children.length === 2) {
+      extractFromTwoChildren($children, properties);
+    } else if ($children.length > 0) {
+      extractFromSpans($row, properties);
+    }
+  });
   
   return properties;
+}
+
+function extractProperties($container) {
+  // Find the collapsible content div (where properties actually are)
+  const $content = $container.find('div[class*="collapsible-content"]');
+  
+  if ($content.length) {
+    const properties = extractFromPropertyWrappers($content);
+    if (Object.keys(properties).length > 0) {
+      return properties;
+    }
+  }
+  
+  // Fallback: Try generic structure extraction
+  const properties = extractFromGenericStructure($container);
+  if (Object.keys(properties).length > 0) {
+    return properties;
+  }
+  
+  // Last resort: Parse visible text
+  const textProperties = {};
+  const text = $container.text();
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  for (let i = 0; i < lines.length - 1;) {
+    const key = lines[i].trim();
+    const value = lines[i + 1].trim();
+    
+    if (isValidPropertyKey(key)) {
+      const cleanedValue = cleanPropertyValue(value);
+      if (cleanedValue) {
+        textProperties[key] = cleanedValue;
+        i += 2;
+      } else {
+        i++;
+      }
+    } else {
+      i++;
+    }
+  }
+  
+  return textProperties;
 }
 
 function displayJSONModal(data) {
