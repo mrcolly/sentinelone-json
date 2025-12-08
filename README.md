@@ -11,6 +11,23 @@ A Chrome extension that adds a "See as JSON" button to SentinelOne event logs, a
 - 🎨 Dark theme matching SentinelOne's interface
 - ⚡ Works automatically when viewing events
 
+## Development Setup
+
+This extension uses NPM packages for cleaner code. You'll need to build it first:
+
+```bash
+# Install dependencies
+npm install
+
+# Build the extension
+npm run build
+
+# Or use watch mode for development
+npm run watch
+```
+
+See [BUILD.md](BUILD.md) for detailed build instructions and [NPM_PACKAGES.md](NPM_PACKAGES.md) for package details.
+
 ## Installation
 
 ### Option 1: Install from Chrome Web Store

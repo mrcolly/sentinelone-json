@@ -3,9 +3,8 @@ node_modules/
 package-lock.json
 yarn.lock
 
-# Build outputs
+# Build outputs (don't ignore content.js - it's the bundled output)
 dist/
-build/
 *.crx
 *.pem
 *.zip
