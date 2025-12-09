@@ -35,13 +35,12 @@ See [BUILD.md](BUILD.md) for detailed build instructions.
 
 ### Option 2: Install as Unpacked Extension (Developer Mode)
 
-1. **Clone the repository and build**
+1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd sentinelone-json
-   npm install
-   npm run build
    ```
+
+   > **Note**: The build files are already included in the repository, so you don't need to rebuild unless you're modifying the code. If you do want to make changes, see the [Development Setup](#development-setup) section.
 
 2. **Open Chrome Extensions page**
    - Open Chrome and navigate to `chrome://extensions/`
