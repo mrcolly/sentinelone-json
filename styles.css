@@ -1,10 +1,5 @@
 /* SentinelOne JSON Viewer Styles */
 
-/* Button styling - matches SentinelOne's design */
-.s1-json-viewer-button {
-  margin-left: 8px !important;
-}
-
 /* Modal overlay */
 .s1-json-modal {
   position: fixed;
