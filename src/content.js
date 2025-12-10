@@ -2,6 +2,12 @@
 import { set } from 'lodash-es';
 import $ from 'cash-dom';
 
+// Constants for validation thresholds
+const MIN_KEY_LENGTH = 2;
+const MAX_KEY_LENGTH = 150;
+const MAX_SPECIAL_CHARS = 3;
+const MIN_PROPERTY_COUNT = 5;
+
 // Wait for the DOM to be ready and watch for changes
 let observer = null;
 let jsonModalOpen = false;
@@ -93,14 +99,6 @@ function injectJsonButton(container) {
 function extractAndShowJSON() {
   const eventData = {};
   
-  // Find the Event properties section
-  const $propertiesSection = findEventPropertiesSection();
-  
-  if (!$propertiesSection?.length) {
-    alert('Could not find event properties. Please make sure an event is open.');
-    return;
-  }
-  
   // Extract event time
   const bodyText = $('body').text();
   const eventTimeRegex = /Event Time[\s\S]*?(\w{3} \d{2}, \d{4} \d{2}:\d{2}:\d{2})/;
@@ -109,11 +107,29 @@ function extractAndShowJSON() {
     eventData.eventTime = eventTimeMatch[1];
   }
   
-  // Extract all property rows
-  const properties = extractProperties($propertiesSection);
+  // Find and extract Event properties section
+  const $propertiesSection = findSection('Event properties');
+  let allProperties = {};
+  
+  if ($propertiesSection?.length) {
+    const properties = extractProperties($propertiesSection);
+    allProperties = { ...allProperties, ...properties };
+  }
+  
+  // Find and extract Server info section
+  const $serverInfoSection = findSection('Server info');
+  if ($serverInfoSection?.length) {
+    const serverInfo = extractProperties($serverInfoSection);
+    allProperties = { ...allProperties, ...serverInfo };
+  }
+  
+  if (Object.keys(allProperties).length === 0) {
+    alert('Could not find event properties. Please make sure an event is open.');
+    return;
+  }
   
   // Convert flat properties to nested structure using lodash
-  const nestedProperties = convertToNestedObject(properties);
+  const nestedProperties = convertToNestedObject(allProperties);
   eventData.properties = nestedProperties;
   
   // Show JSON in modal
@@ -146,8 +162,11 @@ function convertToNestedObject(flatObj) {
   return result;
 }
 
-function findEventPropertiesSection() {
-  // Look for "Event properties" heading
+/**
+ * Find a section by its heading text (e.g., "Event properties", "Server info")
+ */
+function findSection(sectionName) {
+  // Look for heading with the section name
   const $headings = $('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"], span[class*="heading"], span[class*="title"]');
   
   let $section = null;
@@ -155,7 +174,7 @@ function findEventPropertiesSection() {
   $headings.each(function() {
     const text = $(this).text().trim();
     
-    if (text === 'Event properties') {
+    if (text === sectionName) {
       // Try to find the container with the properties
       let $container = $(this).parent();
       
@@ -169,11 +188,11 @@ function findEventPropertiesSection() {
         // Look for a container that has property rows inside
         const propertyRegex = /^[a-z]+\.[a-z_]+\.[a-z_]+$/;
         const $props = $container.find('div').filter(function() {
-          const text = $(this).text();
-          return propertyRegex.test(text);
+          const divText = $(this).text();
+          return propertyRegex.test(divText);
         });
         
-        if ($props.length > 5) {
+        if ($props.length > MIN_PROPERTY_COUNT) {
           $section = $container;
           return false;
         }
@@ -190,48 +209,7 @@ function findEventPropertiesSection() {
     }
   });
   
-  if ($section?.length) {
-    return $section;
-  }
-  
-  // Alternative: look for a container with many property-like elements
-  // but NOT the main shell container
-  let $found = null;
-  let maxProps = 0;
-  
-  $('div[class], section[class]').each(function() {
-    const $container = $(this);
-    const classes = $container.attr('class') || '';
-    
-    // Skip main layout containers
-    if (classes.includes('Shell') || 
-        classes.includes('Layout_container') ||
-        classes.includes('App')) {
-      return; // Continue
-    }
-    
-    // Count how many property-like direct children it has
-    const $children = $container.children();
-    let propCount = 0;
-    
-    const propertyKeyRegex = /^[a-z]+\.[a-z_.]+$/;
-    $children.each(function() {
-      const $child = $(this);
-      if ($child.children().length === 2) {
-        const key = $child.children().eq(0).text().trim();
-        if (propertyKeyRegex.test(key)) {
-          propCount++;
-        }
-      }
-    });
-    
-    if (propCount > maxProps && propCount > 3) {
-      maxProps = propCount;
-      $found = $container;
-    }
-  });
-  
-  return $found;
+  return $section;
 }
 
 /**
@@ -266,10 +244,7 @@ function isLogFormat(key) {
  */
 function isValidPropertyKey(key) {
   // Basic validation
-  if (!key || key.length < 2 || key.length > 150) return false;
-  
-  // Must contain dot or underscore (property naming convention)
-  if (!key.includes('.') && !key.includes('_')) return false;
+  if (!key || key.length < MIN_KEY_LENGTH || key.length > MAX_KEY_LENGTH) return false;
   
   // Skip UI elements and log formats
   if (isUIElement(key) || isLogFormat(key)) return false;
@@ -280,7 +255,7 @@ function isValidPropertyKey(key) {
   
   // Should look like a property path (alphanumeric, dots, underscores, hyphens)
   const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
-  return specialChars <= 3;
+  return specialChars <= MAX_SPECIAL_CHARS;
 }
 
 /**
@@ -289,15 +264,7 @@ function isValidPropertyKey(key) {
 function cleanPropertyValue(value) {
   if (!value) return null;
   
-  const cleaned = value.trim();
-  
-  // Skip very long values (likely corrupted data)
-  if (cleaned.length > 1000) return null;
-  
-  // Skip values that look like they contain full log lines
-  if (cleaned.includes('|') && cleaned.length > 100) return null;
-  
-  return cleaned;
+  return value.trim();
 }
 
 /**
@@ -316,7 +283,22 @@ function extractFromPropertyWrappers($content) {
       const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
       
       if ($labelWrapper.length && $valueWrapper.length) {
-        const key = $labelWrapper.text().trim();
+        // Try to get full key from title attribute (check wrapper and child elements)
+        let key = $labelWrapper.attr('title');
+        
+        // If no title on wrapper, check child elements (like span)
+        if (!key) {
+          const $childWithTitle = $labelWrapper.find('[title]').first();
+          if ($childWithTitle.length) {
+            key = $childWithTitle.attr('title');
+          }
+        }
+        
+        // Fallback to text content if no title found
+        if (!key) {
+          key = $labelWrapper.text().trim();
+        }
+        
         const value = $valueWrapper.text().trim();
         
         if (isValidPropertyKey(key)) {

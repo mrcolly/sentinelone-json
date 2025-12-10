@@ -1738,6 +1738,10 @@
 
   // src/content.js
   var import_cash_dom = __toESM(require_cash(), 1);
+  var MIN_KEY_LENGTH = 2;
+  var MAX_KEY_LENGTH = 150;
+  var MAX_SPECIAL_CHARS = 3;
+  var MIN_PROPERTY_COUNT = 5;
   var observer = null;
   var jsonModalOpen = false;
   function init() {
@@ -1801,19 +1805,28 @@
   }
   function extractAndShowJSON() {
     const eventData = {};
-    const $propertiesSection = findEventPropertiesSection();
-    if (!($propertiesSection == null ? void 0 : $propertiesSection.length)) {
-      alert("Could not find event properties. Please make sure an event is open.");
-      return;
-    }
     const bodyText = (0, import_cash_dom.default)("body").text();
     const eventTimeRegex = /Event Time[\s\S]*?(\w{3} \d{2}, \d{4} \d{2}:\d{2}:\d{2})/;
     const eventTimeMatch = eventTimeRegex.exec(bodyText);
     if (eventTimeMatch) {
       eventData.eventTime = eventTimeMatch[1];
     }
-    const properties = extractProperties($propertiesSection);
-    const nestedProperties = convertToNestedObject(properties);
+    const $propertiesSection = findSection("Event properties");
+    let allProperties = {};
+    if ($propertiesSection == null ? void 0 : $propertiesSection.length) {
+      const properties = extractProperties($propertiesSection);
+      allProperties = { ...allProperties, ...properties };
+    }
+    const $serverInfoSection = findSection("Server info");
+    if ($serverInfoSection == null ? void 0 : $serverInfoSection.length) {
+      const serverInfo = extractProperties($serverInfoSection);
+      allProperties = { ...allProperties, ...serverInfo };
+    }
+    if (Object.keys(allProperties).length === 0) {
+      alert("Could not find event properties. Please make sure an event is open.");
+      return;
+    }
+    const nestedProperties = convertToNestedObject(allProperties);
     eventData.properties = nestedProperties;
     displayJSONModal(eventData);
   }
@@ -1829,12 +1842,12 @@
     });
     return result;
   }
-  function findEventPropertiesSection() {
+  function findSection(sectionName) {
     const $headings = (0, import_cash_dom.default)('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"], span[class*="heading"], span[class*="title"]');
     let $section = null;
     $headings.each(function() {
       const text = (0, import_cash_dom.default)(this).text().trim();
-      if (text === "Event properties") {
+      if (text === sectionName) {
         let $container = (0, import_cash_dom.default)(this).parent();
         while ($container.length && !$container.is("body")) {
           const classes = $container.attr("class") || "";
@@ -1843,10 +1856,10 @@
           }
           const propertyRegex = /^[a-z]+\.[a-z_]+\.[a-z_]+$/;
           const $props = $container.find("div").filter(function() {
-            const text2 = (0, import_cash_dom.default)(this).text();
-            return propertyRegex.test(text2);
+            const divText = (0, import_cash_dom.default)(this).text();
+            return propertyRegex.test(divText);
           });
-          if ($props.length > 5) {
+          if ($props.length > MIN_PROPERTY_COUNT) {
             $section = $container;
             return false;
           }
@@ -1858,35 +1871,7 @@
         return false;
       }
     });
-    if ($section == null ? void 0 : $section.length) {
-      return $section;
-    }
-    let $found = null;
-    let maxProps = 0;
-    (0, import_cash_dom.default)("div[class], section[class]").each(function() {
-      const $container = (0, import_cash_dom.default)(this);
-      const classes = $container.attr("class") || "";
-      if (classes.includes("Shell") || classes.includes("Layout_container") || classes.includes("App")) {
-        return;
-      }
-      const $children = $container.children();
-      let propCount = 0;
-      const propertyKeyRegex = /^[a-z]+\.[a-z_.]+$/;
-      $children.each(function() {
-        const $child = (0, import_cash_dom.default)(this);
-        if ($child.children().length === 2) {
-          const key = $child.children().eq(0).text().trim();
-          if (propertyKeyRegex.test(key)) {
-            propCount++;
-          }
-        }
-      });
-      if (propCount > maxProps && propCount > 3) {
-        maxProps = propCount;
-        $found = $container;
-      }
-    });
-    return $found;
+    return $section;
   }
   function isUIElement(key) {
     return key.includes("See as JSON") || key.includes("See in ") || key.includes("Collapse") || key.includes("Search") || key.includes("Event properties") || key.includes("Event Time");
@@ -1896,9 +1881,7 @@
     return key.includes("|") || key.includes("PM") || key.includes("AM") || key.includes("=") || key.includes("'") || key.includes('"') || key.includes("...") || timePattern.test(key);
   }
   function isValidPropertyKey(key) {
-    if (!key || key.length < 2 || key.length > 150)
-      return false;
-    if (!key.includes(".") && !key.includes("_"))
+    if (!key || key.length < MIN_KEY_LENGTH || key.length > MAX_KEY_LENGTH)
       return false;
     if (isUIElement(key) || isLogFormat(key))
       return false;
@@ -1906,17 +1889,12 @@
     if (emojiPattern.test(key))
       return false;
     const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
-    return specialChars <= 3;
+    return specialChars <= MAX_SPECIAL_CHARS;
   }
   function cleanPropertyValue(value) {
     if (!value)
       return null;
-    const cleaned = value.trim();
-    if (cleaned.length > 1e3)
-      return null;
-    if (cleaned.includes("|") && cleaned.length > 100)
-      return null;
-    return cleaned;
+    return value.trim();
   }
   function extractFromPropertyWrappers($content) {
     const properties = {};
@@ -1928,7 +1906,16 @@
         const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
         const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
         if ($labelWrapper.length && $valueWrapper.length) {
-          const key = $labelWrapper.text().trim();
+          let key = $labelWrapper.attr("title");
+          if (!key) {
+            const $childWithTitle = $labelWrapper.find("[title]").first();
+            if ($childWithTitle.length) {
+              key = $childWithTitle.attr("title");
+            }
+          }
+          if (!key) {
+            key = $labelWrapper.text().trim();
+          }
           const value = $valueWrapper.text().trim();
           if (isValidPropertyKey(key)) {
             const cleanedValue = cleanPropertyValue(value);
