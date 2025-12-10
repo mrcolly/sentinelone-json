@@ -229,14 +229,17 @@ function findSection(sectionName) {
         if (classes.includes('Shell') || classes.includes('Layout_container')) {
           break;
         }
-        // Look for a container that has property rows inside
-        const propertyRegex = /^[a-z]+\.[a-z_]+\.[a-z_]+$/;
-        const $props = $container.find('div').filter(function() {
-          const divText = $(this).text();
-          return propertyRegex.test(divText);
-        });
         
-        if ($props.length > MIN_PROPERTY_COUNT) {
+        // Look for SentinelOne's specific property wrapper classes
+        const $propertyWrappers = $container.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
+        if ($propertyWrappers.length > MIN_PROPERTY_COUNT) {
+          $section = $container;
+          return false;
+        }
+        
+        // Fallback: Look for a container that has property rows inside (but be more lenient)
+        const $collapsibleContent = $container.find('div[class*="collapsible-content"]');
+        if ($collapsibleContent.length > 0) {
           $section = $container;
           return false;
         }

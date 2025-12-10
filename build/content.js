@@ -1883,12 +1883,13 @@
           if (classes.includes("Shell") || classes.includes("Layout_container")) {
             break;
           }
-          const propertyRegex = /^[a-z]+\.[a-z_]+\.[a-z_]+$/;
-          const $props = $container.find("div").filter(function() {
-            const divText = (0, import_cash_dom.default)(this).text();
-            return propertyRegex.test(divText);
-          });
-          if ($props.length > MIN_PROPERTY_COUNT) {
+          const $propertyWrappers = $container.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
+          if ($propertyWrappers.length > MIN_PROPERTY_COUNT) {
+            $section = $container;
+            return false;
+          }
+          const $collapsibleContent = $container.find('div[class*="collapsible-content"]');
+          if ($collapsibleContent.length > 0) {
             $section = $container;
             return false;
           }
