@@ -1742,6 +1742,8 @@
   var MAX_KEY_LENGTH = 150;
   var MAX_SPECIAL_CHARS = 3;
   var MIN_PROPERTY_COUNT = 5;
+  var MIN_SEARCH_LENGTH = 2;
+  var SEARCH_DEBOUNCE_MS = 300;
   var observer = null;
   var jsonModalOpen = false;
   function init() {
@@ -1997,6 +1999,95 @@
     }
     return textProperties;
   }
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  function createSearchFunctionality(jsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
+    let currentMatchIndex = -1;
+    let matches = [];
+    function highlightMatches(searchTerm) {
+      let highlighted = "";
+      let lastIndex = 0;
+      matches.forEach((matchPos, idx) => {
+        highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
+        highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? "current" : ""}" data-match-idx="${idx}">`;
+        highlighted += escapeHtml(jsonString.substring(matchPos, matchPos + searchTerm.length));
+        highlighted += "</mark>";
+        lastIndex = matchPos + searchTerm.length;
+      });
+      highlighted += escapeHtml(jsonString.substring(lastIndex));
+      $codeElement.html(highlighted);
+    }
+    function scrollToMatch(index) {
+      const $marks = $codeElement.find("mark");
+      $marks.removeClass("current");
+      if (index >= 0 && index < matches.length) {
+        const $currentMark = $marks.eq(index);
+        $currentMark.addClass("current");
+        const markElement = $currentMark.get(0);
+        if (markElement) {
+          markElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest"
+          });
+        }
+      }
+    }
+    function updateSearchInfo() {
+      if (matches.length > 0) {
+        $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
+      }
+    }
+    function navigateToMatch(direction) {
+      if (matches.length === 0)
+        return;
+      if (direction === "next") {
+        currentMatchIndex = (currentMatchIndex + 1) % matches.length;
+      } else {
+        currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
+      }
+      scrollToMatch(currentMatchIndex);
+      updateSearchInfo();
+      highlightMatches($searchInput.val());
+    }
+    function performSearch(searchTerm) {
+      $codeElement.html(escapeHtml(jsonString));
+      matches = [];
+      currentMatchIndex = -1;
+      if (!searchTerm || searchTerm.length < MIN_SEARCH_LENGTH) {
+        $searchInfo.text("");
+        $prevBtn.prop("disabled", true);
+        $nextBtn.prop("disabled", true);
+        return;
+      }
+      const lowerJson = jsonString.toLowerCase();
+      const lowerSearch = searchTerm.toLowerCase();
+      let pos = 0;
+      while ((pos = lowerJson.indexOf(lowerSearch, pos)) !== -1) {
+        matches.push(pos);
+        pos += searchTerm.length;
+      }
+      if (matches.length === 0) {
+        $searchInfo.text("No matches");
+        $prevBtn.prop("disabled", true);
+        $nextBtn.prop("disabled", true);
+        return;
+      }
+      highlightMatches(searchTerm);
+      currentMatchIndex = 0;
+      scrollToMatch(0);
+      updateSearchInfo();
+      $prevBtn.prop("disabled", false);
+      $nextBtn.prop("disabled", false);
+    }
+    return {
+      performSearch,
+      navigateToMatch
+    };
+  }
   function displayJSONModal(data) {
     const $existing = (0, import_cash_dom.default)("#s1-json-modal");
     if ($existing.length) {
@@ -2025,109 +2116,35 @@
     const $jsonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-container").append(
       (0, import_cash_dom.default)("<pre>").addClass("s1-json-pre").append($codeElement)
     );
-    let currentMatchIndex = -1;
-    let matches = [];
-    function performSearch(searchTerm) {
-      $codeElement.html(escapeHtml(jsonString));
-      matches = [];
-      currentMatchIndex = -1;
-      if (!searchTerm || searchTerm.length < 2) {
-        $searchInfo.text("");
-        $prevBtn.prop("disabled", true);
-        $nextBtn.prop("disabled", true);
-        return;
-      }
-      const lowerJson = jsonString.toLowerCase();
-      const lowerSearch = searchTerm.toLowerCase();
-      let pos = 0;
-      while ((pos = lowerJson.indexOf(lowerSearch, pos)) !== -1) {
-        matches.push(pos);
-        pos += searchTerm.length;
-      }
-      if (matches.length === 0) {
-        $searchInfo.text("No matches");
-        $prevBtn.prop("disabled", true);
-        $nextBtn.prop("disabled", true);
-        return;
-      }
-      highlightMatches(searchTerm);
-      currentMatchIndex = 0;
-      scrollToMatch(0);
-      updateSearchInfo();
-      $prevBtn.prop("disabled", false);
-      $nextBtn.prop("disabled", false);
-    }
-    function highlightMatches(searchTerm) {
-      let highlighted = "";
-      let lastIndex = 0;
-      matches.forEach((matchPos, idx) => {
-        highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
-        highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? "current" : ""}" data-match-idx="${idx}">`;
-        highlighted += escapeHtml(jsonString.substr(matchPos, searchTerm.length));
-        highlighted += "</mark>";
-        lastIndex = matchPos + searchTerm.length;
-      });
-      highlighted += escapeHtml(jsonString.substring(lastIndex));
-      $codeElement.html(highlighted);
-    }
-    function scrollToMatch(index) {
-      const $marks = $codeElement.find("mark");
-      $marks.removeClass("current");
-      if (index >= 0 && index < matches.length) {
-        const $currentMark = $marks.eq(index);
-        $currentMark.addClass("current");
-        const containerTop = $jsonContainer.get(0).scrollTop;
-        const containerHeight = $jsonContainer.get(0).clientHeight;
-        const markTop = $currentMark.get(0).offsetTop;
-        if (markTop < containerTop || markTop > containerTop + containerHeight - 100) {
-          $jsonContainer.get(0).scrollTop = markTop - 100;
-        }
-      }
-    }
-    function updateSearchInfo() {
-      if (matches.length > 0) {
-        $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
-      }
-    }
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
-    }
+    const search = createSearchFunctionality(
+      jsonString,
+      $codeElement,
+      $jsonContainer,
+      $searchInfo,
+      $prevBtn,
+      $nextBtn,
+      $searchInput
+    );
     let searchTimeout;
     $searchInput.on("input", function() {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
-        performSearch((0, import_cash_dom.default)(this).val());
-      }, 300);
+        search.performSearch((0, import_cash_dom.default)(this).val());
+      }, SEARCH_DEBOUNCE_MS);
     });
-    $prevBtn.on("click", () => {
-      if (matches.length > 0) {
-        currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
-        scrollToMatch(currentMatchIndex);
-        updateSearchInfo();
-        highlightMatches($searchInput.val());
-      }
-    });
-    $nextBtn.on("click", () => {
-      if (matches.length > 0) {
-        currentMatchIndex = (currentMatchIndex + 1) % matches.length;
-        scrollToMatch(currentMatchIndex);
-        updateSearchInfo();
-        highlightMatches($searchInput.val());
-      }
-    });
+    $prevBtn.on("click", () => search.navigateToMatch("prev"));
+    $nextBtn.on("click", () => search.navigateToMatch("next"));
     $searchInput.on("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         if (e.shiftKey) {
-          $prevBtn.trigger("click");
+          search.navigateToMatch("prev");
         } else {
-          $nextBtn.trigger("click");
+          search.navigateToMatch("next");
         }
       } else if (e.key === "Escape") {
         $searchInput.val("");
-        performSearch("");
+        search.performSearch("");
       }
     });
     const $copyBtn = (0, import_cash_dom.default)("<button>").text("Copy to Clipboard").addClass("s1-json-copy-btn").on("click", function() {

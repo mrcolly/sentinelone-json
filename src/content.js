@@ -8,6 +8,10 @@ const MAX_KEY_LENGTH = 150;
 const MAX_SPECIAL_CHARS = 3;
 const MIN_PROPERTY_COUNT = 5;
 
+// Constants for search functionality
+const MIN_SEARCH_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 300;
+
 // Wait for the DOM to be ready and watch for changes
 let observer = null;
 let jsonModalOpen = false;
@@ -410,6 +414,123 @@ function extractProperties($container) {
   return textProperties;
 }
 
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
+ * Create search functionality for JSON modal
+ */
+function createSearchFunctionality(jsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
+  let currentMatchIndex = -1;
+  let matches = [];
+  
+  function highlightMatches(searchTerm) {
+    let highlighted = '';
+    let lastIndex = 0;
+    
+    matches.forEach((matchPos, idx) => {
+      highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
+      highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? 'current' : ''}" data-match-idx="${idx}">`;
+      highlighted += escapeHtml(jsonString.substring(matchPos, matchPos + searchTerm.length));
+      highlighted += '</mark>';
+      lastIndex = matchPos + searchTerm.length;
+    });
+    
+    highlighted += escapeHtml(jsonString.substring(lastIndex));
+    $codeElement.html(highlighted);
+  }
+  
+  function scrollToMatch(index) {
+    const $marks = $codeElement.find('mark');
+    $marks.removeClass('current');
+    
+    if (index >= 0 && index < matches.length) {
+      const $currentMark = $marks.eq(index);
+      $currentMark.addClass('current');
+      
+      // Scroll to the match using scrollIntoView for better reliability
+      const markElement = $currentMark.get(0);
+      if (markElement) {
+        markElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest'
+        });
+      }
+    }
+  }
+  
+  function updateSearchInfo() {
+    if (matches.length > 0) {
+      $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
+    }
+  }
+  
+  function navigateToMatch(direction) {
+    if (matches.length === 0) return;
+    
+    if (direction === 'next') {
+      currentMatchIndex = (currentMatchIndex + 1) % matches.length;
+    } else {
+      currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
+    }
+    
+    scrollToMatch(currentMatchIndex);
+    updateSearchInfo();
+    highlightMatches($searchInput.val());
+  }
+  
+  function performSearch(searchTerm) {
+    // Reset highlighting
+    $codeElement.html(escapeHtml(jsonString));
+    matches = [];
+    currentMatchIndex = -1;
+    
+    if (!searchTerm || searchTerm.length < MIN_SEARCH_LENGTH) {
+      $searchInfo.text('');
+      $prevBtn.prop('disabled', true);
+      $nextBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Find all matches (case-insensitive)
+    const lowerJson = jsonString.toLowerCase();
+    const lowerSearch = searchTerm.toLowerCase();
+    let pos = 0;
+    
+    while ((pos = lowerJson.indexOf(lowerSearch, pos)) !== -1) {
+      matches.push(pos);
+      pos += searchTerm.length;
+    }
+    
+    if (matches.length === 0) {
+      $searchInfo.text('No matches');
+      $prevBtn.prop('disabled', true);
+      $nextBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Highlight all matches
+    highlightMatches(searchTerm);
+    currentMatchIndex = 0;
+    scrollToMatch(0);
+    updateSearchInfo();
+    $prevBtn.prop('disabled', false);
+    $nextBtn.prop('disabled', false);
+  }
+  
+  return {
+    performSearch,
+    navigateToMatch
+  };
+}
+
 function displayJSONModal(data) {
   // Remove existing modal if any
   const $existing = $('#s1-json-modal');
@@ -475,136 +596,42 @@ function displayJSONModal(data) {
         .append($codeElement)
     );
   
-  // Search functionality
-  let currentMatchIndex = -1;
-  let matches = [];
-  
-  function performSearch(searchTerm) {
-    // Reset highlighting
-    $codeElement.html(escapeHtml(jsonString));
-    matches = [];
-    currentMatchIndex = -1;
-    
-    if (!searchTerm || searchTerm.length < 2) {
-      $searchInfo.text('');
-      $prevBtn.prop('disabled', true);
-      $nextBtn.prop('disabled', true);
-      return;
-    }
-    
-    // Find all matches (case-insensitive)
-    const lowerJson = jsonString.toLowerCase();
-    const lowerSearch = searchTerm.toLowerCase();
-    let pos = 0;
-    
-    while ((pos = lowerJson.indexOf(lowerSearch, pos)) !== -1) {
-      matches.push(pos);
-      pos += searchTerm.length;
-    }
-    
-    if (matches.length === 0) {
-      $searchInfo.text('No matches');
-      $prevBtn.prop('disabled', true);
-      $nextBtn.prop('disabled', true);
-      return;
-    }
-    
-    // Highlight all matches
-    highlightMatches(searchTerm);
-    currentMatchIndex = 0;
-    scrollToMatch(0);
-    updateSearchInfo();
-    $prevBtn.prop('disabled', false);
-    $nextBtn.prop('disabled', false);
-  }
-  
-  function highlightMatches(searchTerm) {
-    let highlighted = '';
-    let lastIndex = 0;
-    
-    matches.forEach((matchPos, idx) => {
-      highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
-      highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? 'current' : ''}" data-match-idx="${idx}">`;
-      highlighted += escapeHtml(jsonString.substr(matchPos, searchTerm.length));
-      highlighted += '</mark>';
-      lastIndex = matchPos + searchTerm.length;
-    });
-    
-    highlighted += escapeHtml(jsonString.substring(lastIndex));
-    $codeElement.html(highlighted);
-  }
-  
-  function scrollToMatch(index) {
-    const $marks = $codeElement.find('mark');
-    $marks.removeClass('current');
-    
-    if (index >= 0 && index < matches.length) {
-      const $currentMark = $marks.eq(index);
-      $currentMark.addClass('current');
-      
-      // Scroll to the match
-      const containerTop = $jsonContainer.get(0).scrollTop;
-      const containerHeight = $jsonContainer.get(0).clientHeight;
-      const markTop = $currentMark.get(0).offsetTop;
-      
-      if (markTop < containerTop || markTop > containerTop + containerHeight - 100) {
-        $jsonContainer.get(0).scrollTop = markTop - 100;
-      }
-    }
-  }
-  
-  function updateSearchInfo() {
-    if (matches.length > 0) {
-      $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
-    }
-  }
-  
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
+  // Initialize search functionality
+  const search = createSearchFunctionality(
+    jsonString, 
+    $codeElement, 
+    $jsonContainer, 
+    $searchInfo, 
+    $prevBtn, 
+    $nextBtn, 
+    $searchInput
+  );
   
   // Search input event
   let searchTimeout;
   $searchInput.on('input', function() {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-      performSearch($(this).val());
-    }, 300);
+      search.performSearch($(this).val());
+    }, SEARCH_DEBOUNCE_MS);
   });
   
   // Navigation buttons
-  $prevBtn.on('click', () => {
-    if (matches.length > 0) {
-      currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
-      scrollToMatch(currentMatchIndex);
-      updateSearchInfo();
-      highlightMatches($searchInput.val());
-    }
-  });
-  
-  $nextBtn.on('click', () => {
-    if (matches.length > 0) {
-      currentMatchIndex = (currentMatchIndex + 1) % matches.length;
-      scrollToMatch(currentMatchIndex);
-      updateSearchInfo();
-      highlightMatches($searchInput.val());
-    }
-  });
+  $prevBtn.on('click', () => search.navigateToMatch('prev'));
+  $nextBtn.on('click', () => search.navigateToMatch('next'));
   
   // Keyboard shortcuts in search
   $searchInput.on('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
-        $prevBtn.trigger('click');
+        search.navigateToMatch('prev');
       } else {
-        $nextBtn.trigger('click');
+        search.navigateToMatch('next');
       }
     } else if (e.key === 'Escape') {
       $searchInput.val('');
-      performSearch('');
+      search.performSearch('');
     }
   });
   
