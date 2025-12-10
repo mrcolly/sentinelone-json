@@ -1744,6 +1744,11 @@
   var MIN_PROPERTY_COUNT = 5;
   var MIN_SEARCH_LENGTH = 2;
   var SEARCH_DEBOUNCE_MS = 300;
+  var FOCUS_DELAY_MS = 100;
+  var COPY_FEEDBACK_MS = 500;
+  var INDENT_PIXELS = 20;
+  var RANDOM_ID_START = 2;
+  var RANDOM_ID_END = 11;
   var observer = null;
   var jsonModalOpen = false;
   function init() {
@@ -1813,63 +1818,20 @@
     if (eventTimeMatch) {
       eventData.eventTime = eventTimeMatch[1];
     }
-    const $propertiesSection = findSection("Event properties");
     let allProperties = {};
+    const $propertiesSection = findSection("Event properties");
     if ($propertiesSection == null ? void 0 : $propertiesSection.length) {
-      const properties = extractProperties($propertiesSection);
-      allProperties = { ...allProperties, ...properties };
+      allProperties = { ...allProperties, ...extractProperties($propertiesSection) };
     }
     const $serverInfoSection = findSection("Server info");
     if ($serverInfoSection == null ? void 0 : $serverInfoSection.length) {
-      const serverInfo = extractProperties($serverInfoSection);
-      allProperties = { ...allProperties, ...serverInfo };
+      allProperties = { ...allProperties, ...extractProperties($serverInfoSection) };
     }
     if (Object.keys(allProperties).length === 0) {
       alert("Could not find event properties. Please make sure an event is open.");
       return;
     }
     displayJSONModal(eventData, allProperties);
-  }
-  function tryParseJSON(value) {
-    if (typeof value !== "string")
-      return value;
-    const trimmed = value.trim();
-    if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
-      return value;
-    }
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value;
-    }
-  }
-  function parseJSONStrings(obj) {
-    if (typeof obj !== "object" || obj === null) {
-      return tryParseJSON(obj);
-    }
-    if (Array.isArray(obj)) {
-      return obj.map((item) => parseJSONStrings(item));
-    }
-    const result = {};
-    Object.entries(obj).forEach(([key, value]) => {
-      result[key] = parseJSONStrings(value);
-    });
-    return result;
-  }
-  function convertToNestedObject(flatObj, parseJSON = false) {
-    const result = {};
-    Object.entries(flatObj).forEach(([key, value]) => {
-      if (key.includes("..."))
-        return;
-      const cleanKey = key.split(".").filter((segment) => segment.trim().length > 0).join(".");
-      if (cleanKey && cleanKey.length > 0) {
-        set_default(result, cleanKey, value);
-      }
-    });
-    if (parseJSON) {
-      return parseJSONStrings(result);
-    }
-    return result;
   }
   function findSection(sectionName) {
     const $headings = (0, import_cash_dom.default)('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"], span[class*="heading"], span[class*="title"]');
@@ -1926,35 +1888,40 @@
       return null;
     return value.trim();
   }
+  function extractKeyFromLabel($labelWrapper) {
+    let key = $labelWrapper.attr("title");
+    if (key)
+      return key;
+    const $childWithTitle = $labelWrapper.find("[title]").first();
+    if ($childWithTitle.length) {
+      key = $childWithTitle.attr("title");
+      if (key)
+        return key;
+    }
+    return $labelWrapper.text().trim();
+  }
+  function processPropertyWrapper($wrapper, properties) {
+    const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
+    if (!$innerDiv.length)
+      return;
+    const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
+    const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
+    if (!$labelWrapper.length || !$valueWrapper.length)
+      return;
+    const key = extractKeyFromLabel($labelWrapper);
+    const value = $valueWrapper.text().trim();
+    if (!isValidPropertyKey(key))
+      return;
+    const cleanedValue = cleanPropertyValue(value);
+    if (cleanedValue) {
+      properties[key] = cleanedValue;
+    }
+  }
   function extractFromPropertyWrappers($content) {
     const properties = {};
     const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
     $propertyWrappers.each(function() {
-      const $wrapper = (0, import_cash_dom.default)(this);
-      const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
-      if ($innerDiv.length) {
-        const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
-        const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
-        if ($labelWrapper.length && $valueWrapper.length) {
-          let key = $labelWrapper.attr("title");
-          if (!key) {
-            const $childWithTitle = $labelWrapper.find("[title]").first();
-            if ($childWithTitle.length) {
-              key = $childWithTitle.attr("title");
-            }
-          }
-          if (!key) {
-            key = $labelWrapper.text().trim();
-          }
-          const value = $valueWrapper.text().trim();
-          if (isValidPropertyKey(key)) {
-            const cleanedValue = cleanPropertyValue(value);
-            if (cleanedValue) {
-              properties[key] = cleanedValue;
-            }
-          }
-        }
-      }
+      processPropertyWrapper((0, import_cash_dom.default)(this), properties);
     });
     return properties;
   }
@@ -2027,47 +1994,259 @@
     }
     return textProperties;
   }
+  function tryParseJSON(value) {
+    if (typeof value !== "string")
+      return value;
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
+      return value;
+    }
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  function parseJSONStrings(obj) {
+    if (typeof obj !== "object" || obj === null) {
+      return tryParseJSON(obj);
+    }
+    if (Array.isArray(obj)) {
+      return obj.map((item) => parseJSONStrings(item));
+    }
+    const result = {};
+    Object.entries(obj).forEach(([key, value]) => {
+      result[key] = parseJSONStrings(value);
+    });
+    return result;
+  }
+  function convertToNestedObject(flatObj, parseJSON = false) {
+    const result = {};
+    Object.entries(flatObj).forEach(([key, value]) => {
+      if (key.includes("..."))
+        return;
+      const cleanKey = key.split(".").filter((segment) => segment.trim().length > 0).join(".");
+      if (cleanKey && cleanKey.length > 0) {
+        set_default(result, cleanKey, value);
+      }
+    });
+    if (parseJSON) {
+      return parseJSONStrings(result);
+    }
+    return result;
+  }
   function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
   }
-  function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
+  function fallbackCopyToClipboard(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      textarea.remove();
+    }
+  }
+  function copyToClipboard(text, onSuccess) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+      fallbackCopyToClipboard(text);
+      onSuccess();
+    });
+  }
+  function getValueType(value) {
+    if (value === null)
+      return "null";
+    if (Array.isArray(value))
+      return "array";
+    return typeof value;
+  }
+  function generateTreeId() {
+    return `tree-${Math.random().toString(36).substring(RANDOM_ID_START, RANDOM_ID_END)}`;
+  }
+  function encodeToBase64(value) {
+    const jsonStr = JSON.stringify(value);
+    const bytes = new TextEncoder().encode(jsonStr);
+    const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
+    return btoa(binString);
+  }
+  function decodeFromBase64(base64) {
+    const binString = atob(base64);
+    const bytes = Uint8Array.from(binString, (char) => char.codePointAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+  function getPrimitiveDisplayValue(value, type) {
+    if (type === "string") {
+      return `"${escapeHtml(value)}"`;
+    }
+    if (type === "null") {
+      return "null";
+    }
+    return value;
+  }
+  function renderPrimitiveHtml(value, type) {
+    const typeClassMap = {
+      string: "json-tree-string",
+      number: "json-tree-number",
+      boolean: "json-tree-boolean",
+      null: "json-tree-null"
+    };
+    const className = typeClassMap[type];
+    const displayValue = getPrimitiveDisplayValue(value, type);
+    return `<span class="${className}">${displayValue}</span>`;
+  }
+  function createKeyHtml(key, isArrayIndex) {
+    if (isArrayIndex) {
+      return `<span class="json-tree-index">[${escapeHtml(key)}]</span>`;
+    }
+    return `<span class="json-tree-key">"${escapeHtml(key)}"</span><span class="json-tree-colon">: </span>`;
+  }
+  function renderJSONTree(data, isExpanded = true) {
+    let lineNumber = 0;
+    function lineNum() {
+      lineNumber++;
+      return `<span class="json-tree-line-number">${lineNumber}</span>`;
+    }
+    function renderValue(value, key, level = 0, isArrayIndex = false, isLast = true) {
+      const type2 = getValueType(value);
+      const indent = level * INDENT_PIXELS;
+      const keyPart = createKeyHtml(key, isArrayIndex);
+      const comma = isLast ? "" : '<span class="json-tree-comma">,</span>';
+      if (type2 === "object" && value !== null) {
+        const entries = Object.entries(value);
+        if (entries.length === 0) {
+          return `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;">${keyPart}<span class="json-tree-bracket">{}</span>${comma}</span></div>`;
+        }
+        const id = generateTreeId();
+        const jsonBase64 = encodeToBase64(value);
+        const expandedClass = isExpanded ? "expanded" : "";
+        const openLine = `<div class="json-tree-line json-tree-collapsible" data-json-b64="${jsonBase64}" data-target="${id}">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><button class="json-tree-toggle ${expandedClass}" data-target="${id}">\u25B6</button>${keyPart}<span class="json-tree-bracket">{</span><span class="json-tree-count">${entries.length} properties</span></span></div>`;
+        const childrenHtml = entries.map(([k, v], idx) => renderValue(v, k, level + 1, false, idx === entries.length - 1)).join("");
+        const closeLine = `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><span class="json-tree-bracket">}</span>${comma}</span></div>`;
+        return `${openLine}<div class="json-tree-children ${expandedClass}" id="${id}">${childrenHtml}</div>${closeLine}`;
+      }
+      if (type2 === "array") {
+        if (value.length === 0) {
+          return `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;">${keyPart}<span class="json-tree-bracket">[]</span>${comma}</span></div>`;
+        }
+        const id = generateTreeId();
+        const jsonBase64 = encodeToBase64(value);
+        const expandedClass = isExpanded ? "expanded" : "";
+        const openLine = `<div class="json-tree-line json-tree-collapsible" data-json-b64="${jsonBase64}" data-target="${id}">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><button class="json-tree-toggle ${expandedClass}" data-target="${id}">\u25B6</button>${keyPart}<span class="json-tree-bracket">[</span><span class="json-tree-count">${value.length} items</span></span></div>`;
+        const childrenHtml = value.map((item, idx) => renderValue(item, idx.toString(), level + 1, true, idx === value.length - 1)).join("");
+        const closeLine = `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><span class="json-tree-bracket">]</span>${comma}</span></div>`;
+        return `${openLine}<div class="json-tree-children ${expandedClass}" id="${id}">${childrenHtml}</div>${closeLine}`;
+      }
+      const valueHtml = renderPrimitiveHtml(value, type2);
+      return `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;">${keyPart}${valueHtml}${comma}</span></div>`;
+    }
+    const type = getValueType(data);
+    if (type === "object" && data !== null) {
+      const entries = Object.entries(data);
+      const rootJsonB64 = encodeToBase64(data);
+      const openLine = `<div class="json-tree-line json-tree-collapsible json-tree-root-line" data-json-b64="${rootJsonB64}">${lineNum()}<span class="json-tree-content"><span class="json-tree-bracket">{</span><span class="json-tree-count">${entries.length} properties \xB7 double-click to copy all</span></span></div>`;
+      const childrenHtml = entries.map(([k, v], idx) => renderValue(v, k, 1, false, idx === entries.length - 1)).join("");
+      const closeLine = `<div class="json-tree-line">${lineNum()}<span class="json-tree-content"><span class="json-tree-bracket">}</span></span></div>`;
+      return `<div class="json-tree-root">${openLine}${childrenHtml}${closeLine}</div>`;
+    }
+    return `<div class="json-tree-root">${renderValue(data, "root", 0, false, true)}</div>`;
+  }
+  function handleTreeDoubleClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const targetElement = event.currentTarget;
+    const jsonB64 = targetElement.dataset.jsonB64;
+    if (!jsonB64)
+      return;
+    try {
+      const json = decodeFromBase64(jsonB64);
+      const parsed = JSON.parse(json);
+      const formatted = JSON.stringify(parsed, null, 2);
+      copyToClipboard(formatted, () => {
+        targetElement.classList.add("json-tree-copied");
+        setTimeout(() => targetElement.classList.remove("json-tree-copied"), COPY_FEEDBACK_MS);
+      });
+    } catch {
+    }
+  }
+  function initTreeToggles($container) {
+    $container.find(".json-tree-toggle").on("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const $btn = (0, import_cash_dom.default)(this);
+      const targetId = $btn.attr("data-target");
+      const $target = (0, import_cash_dom.default)(`#${targetId}`);
+      $btn.toggleClass("expanded");
+      $target.toggleClass("expanded");
+    });
+    const collapsibleElements = $container.find(".json-tree-collapsible").get();
+    collapsibleElements.forEach((el) => {
+      el.addEventListener("dblclick", handleTreeDoubleClick);
+    });
+  }
+  function createSearchFunctionality(options) {
+    const { getJsonString, $displayElement, $searchInfo, $prevBtn, $nextBtn, $searchInput } = options;
     let currentMatchIndex = -1;
     let matches = [];
     function highlightMatches(searchTerm) {
-      const jsonString = getJsonString();
-      let highlighted = "";
-      let lastIndex = 0;
-      matches.forEach((matchPos, idx) => {
-        highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
-        highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? "current" : ""}" data-match-idx="${idx}">`;
-        highlighted += escapeHtml(jsonString.substring(matchPos, matchPos + searchTerm.length));
-        highlighted += "</mark>";
-        lastIndex = matchPos + searchTerm.length;
+      const lowerSearch = searchTerm.toLowerCase();
+      const $treeView = $displayElement.find(".json-tree-root");
+      if (!$treeView.length)
+        return;
+      const $textElements = $treeView.find(".json-tree-string, .json-tree-number, .json-tree-boolean, .json-tree-key, .json-tree-index");
+      $textElements.each(function() {
+        const $el = (0, import_cash_dom.default)(this);
+        $el.text($el.text());
       });
-      highlighted += escapeHtml(jsonString.substring(lastIndex));
-      $codeElement.html(highlighted);
+      let matchIndex = 0;
+      $textElements.each(function() {
+        const $el = (0, import_cash_dom.default)(this);
+        const text = $el.text();
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes(lowerSearch)) {
+          let highlighted = "";
+          let lastIndex = 0;
+          let pos = 0;
+          while ((pos = lowerText.indexOf(lowerSearch, lastIndex)) !== -1) {
+            highlighted += escapeHtml(text.substring(lastIndex, pos));
+            highlighted += `<mark class="s1-json-search-highlight ${matchIndex === currentMatchIndex ? "current" : ""}" data-match-idx="${matchIndex}">`;
+            highlighted += escapeHtml(text.substring(pos, pos + searchTerm.length));
+            highlighted += "</mark>";
+            lastIndex = pos + searchTerm.length;
+            matchIndex++;
+          }
+          highlighted += escapeHtml(text.substring(lastIndex));
+          $el.html(highlighted);
+        }
+      });
     }
     function scrollToMatch(index) {
-      const $marks = $codeElement.find("mark");
+      const $marks = $displayElement.find("mark");
       $marks.removeClass("current");
       if (index >= 0 && index < matches.length) {
         const $currentMark = $marks.eq(index);
         $currentMark.addClass("current");
+        $currentMark.parents(".json-tree-children").each(function() {
+          (0, import_cash_dom.default)(this).addClass("expanded");
+          const id = (0, import_cash_dom.default)(this).attr("id");
+          (0, import_cash_dom.default)(`.json-tree-toggle[data-target="${id}"]`).addClass("expanded");
+        });
         const markElement = $currentMark.get(0);
         if (markElement) {
-          markElement.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-            inline: "nearest"
-          });
+          markElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
         }
       }
     }
     function updateSearchInfo() {
       if (matches.length > 0) {
         $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
+      } else {
+        $searchInfo.text("");
       }
     }
     function navigateToMatch(direction) {
@@ -2078,16 +2257,22 @@
       } else {
         currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
       }
+      highlightMatches($searchInput.val());
       scrollToMatch(currentMatchIndex);
       updateSearchInfo();
-      highlightMatches($searchInput.val());
     }
     function performSearch(searchTerm) {
       const jsonString = getJsonString();
-      $codeElement.html(escapeHtml(jsonString));
       matches = [];
       currentMatchIndex = -1;
       if (!searchTerm || searchTerm.length < MIN_SEARCH_LENGTH) {
+        const $treeView = $displayElement.find(".json-tree-root");
+        if ($treeView.length) {
+          const $textElements = $treeView.find(".json-tree-string, .json-tree-number, .json-tree-boolean, .json-tree-key, .json-tree-index");
+          $textElements.each(function() {
+            (0, import_cash_dom.default)(this).text((0, import_cash_dom.default)(this).text());
+          });
+        }
         $searchInfo.text("");
         $prevBtn.prop("disabled", true);
         $nextBtn.prop("disabled", true);
@@ -2113,10 +2298,7 @@
       $prevBtn.prop("disabled", false);
       $nextBtn.prop("disabled", false);
     }
-    return {
-      performSearch,
-      navigateToMatch
-    };
+    return { performSearch, navigateToMatch };
   }
   function displayJSONModal(eventData, flatProperties) {
     const $existing = (0, import_cash_dom.default)("#s1-json-modal");
@@ -2126,58 +2308,62 @@
       return;
     }
     jsonModalOpen = true;
-    const $modal = (0, import_cash_dom.default)("<div>").attr("id", "s1-json-modal").addClass("s1-json-modal");
-    let parseJSONStrings2 = false;
+    let parseJSONStringsEnabled = false;
+    let jsonString = "";
     function getJSONData() {
       const data = { ...eventData };
-      data.properties = convertToNestedObject(flatProperties, parseJSONStrings2);
+      data.properties = convertToNestedObject(flatProperties, parseJSONStringsEnabled);
       return data;
     }
-    let jsonString = JSON.stringify(getJSONData(), null, 2);
-    const $searchContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-container");
-    const $searchInput = (0, import_cash_dom.default)("<input>").attr("type", "text").attr("placeholder", "Search in JSON...").addClass("s1-json-search-input");
-    const $searchInfo = (0, import_cash_dom.default)("<span>").addClass("s1-json-search-info").text("");
-    const $searchNav = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-nav");
-    const $prevBtn = (0, import_cash_dom.default)("<button>").text("\u2191").addClass("s1-json-search-nav-btn").attr("title", "Previous match").prop("disabled", true);
-    const $nextBtn = (0, import_cash_dom.default)("<button>").text("\u2193").addClass("s1-json-search-nav-btn").attr("title", "Next match").prop("disabled", true);
-    $searchNav.append($prevBtn).append($nextBtn);
-    $searchContainer.append($searchInput).append($searchInfo).append($searchNav);
+    const $modal = (0, import_cash_dom.default)("<div>").attr("id", "s1-json-modal").addClass("s1-json-modal");
     const $header = (0, import_cash_dom.default)("<div>").addClass("s1-json-modal-header").append((0, import_cash_dom.default)("<h2>").text("Event JSON")).append(
       (0, import_cash_dom.default)("<button>").text("\xD7").addClass("s1-json-modal-close").on("click", () => {
         $modal.remove();
         jsonModalOpen = false;
       })
     );
-    const $codeElement = (0, import_cash_dom.default)("<code>").text(jsonString);
-    const $jsonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-container").append(
-      (0, import_cash_dom.default)("<pre>").addClass("s1-json-pre").append($codeElement)
-    );
-    const search = createSearchFunctionality(
-      () => jsonString,
-      $codeElement,
-      $jsonContainer,
+    const $searchContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-container");
+    const $searchInput = (0, import_cash_dom.default)("<input>").attr("type", "text").attr("placeholder", "Search in JSON...").addClass("s1-json-search-input");
+    const $searchInfo = (0, import_cash_dom.default)("<span>").addClass("s1-json-search-info");
+    const $searchNav = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-nav");
+    const $prevBtn = (0, import_cash_dom.default)("<button>").text("\u2191").addClass("s1-json-search-nav-btn").attr("title", "Previous match").prop("disabled", true);
+    const $nextBtn = (0, import_cash_dom.default)("<button>").text("\u2193").addClass("s1-json-search-nav-btn").attr("title", "Next match").prop("disabled", true);
+    $searchNav.append($prevBtn).append($nextBtn);
+    $searchContainer.append($searchInput).append($searchInfo).append($searchNav);
+    const $jsonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-container");
+    const $jsonDisplay = (0, import_cash_dom.default)("<div>").addClass("s1-json-display");
+    $jsonContainer.append($jsonDisplay);
+    function updateDisplay() {
+      const jsonData = getJSONData();
+      jsonString = JSON.stringify(jsonData, null, 2);
+      $jsonDisplay.html(renderJSONTree(jsonData, true));
+      $jsonDisplay.addClass("s1-json-tree-view");
+      initTreeToggles($jsonDisplay);
+      $searchInput.val("");
+      $searchInfo.text("");
+      $prevBtn.prop("disabled", true);
+      $nextBtn.prop("disabled", true);
+    }
+    updateDisplay();
+    const search = createSearchFunctionality({
+      getJsonString: () => jsonString,
+      $displayElement: $jsonDisplay,
       $searchInfo,
       $prevBtn,
       $nextBtn,
       $searchInput
-    );
+    });
     let searchTimeout;
     $searchInput.on("input", function() {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        search.performSearch((0, import_cash_dom.default)(this).val());
-      }, SEARCH_DEBOUNCE_MS);
+      searchTimeout = setTimeout(() => search.performSearch((0, import_cash_dom.default)(this).val()), SEARCH_DEBOUNCE_MS);
     });
     $prevBtn.on("click", () => search.navigateToMatch("prev"));
     $nextBtn.on("click", () => search.navigateToMatch("next"));
     $searchInput.on("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        if (e.shiftKey) {
-          search.navigateToMatch("prev");
-        } else {
-          search.navigateToMatch("next");
-        }
+        search.navigateToMatch(e.shiftKey ? "prev" : "next");
       } else if (e.key === "Escape") {
         $searchInput.val("");
         search.performSearch("");
@@ -2185,28 +2371,13 @@
     });
     const $parseToggle = (0, import_cash_dom.default)("<button>").text("\u{1F504} Parse JSON Strings").addClass("s1-json-parse-btn").attr("title", "Automatically parse JSON strings into objects").on("click", function() {
       const $btn = (0, import_cash_dom.default)(this);
-      parseJSONStrings2 = !parseJSONStrings2;
-      if (parseJSONStrings2) {
-        $btn.text("\u2713 JSON Strings Parsed");
-        $btn.addClass("active");
+      parseJSONStringsEnabled = !parseJSONStringsEnabled;
+      if (parseJSONStringsEnabled) {
+        $btn.text("\u2713 JSON Strings Parsed").addClass("active");
       } else {
-        $btn.text("\u{1F504} Parse JSON Strings");
-        $btn.removeClass("active");
+        $btn.text("\u{1F504} Parse JSON Strings").removeClass("active");
       }
-      jsonString = JSON.stringify(getJSONData(), null, 2);
-      $codeElement.text(jsonString);
-      const searchTerm = $searchInput.val();
-      if (searchTerm && searchTerm.length >= MIN_SEARCH_LENGTH) {
-        search.performSearch(searchTerm);
-      }
-    });
-    const $copyBtn = (0, import_cash_dom.default)("<button>").text("Copy to Clipboard").addClass("s1-json-copy-btn").on("click", function() {
-      const $btn = (0, import_cash_dom.default)(this);
-      navigator.clipboard.writeText(jsonString).then(() => {
-        const originalText = $btn.text();
-        $btn.text("\u2713 Copied!");
-        setTimeout(() => $btn.text(originalText), 2e3);
-      });
+      updateDisplay();
     });
     const $downloadBtn = (0, import_cash_dom.default)("<button>").text("Download JSON").addClass("s1-json-download-btn").on("click", () => {
       const blob = new Blob([jsonString], { type: "application/json" });
@@ -2215,14 +2386,14 @@
       $a.click();
       URL.revokeObjectURL(url);
     });
-    const $buttonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-button-container").append($parseToggle).append($copyBtn).append($downloadBtn);
+    const $buttonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-button-container").append($parseToggle).append($downloadBtn);
     const $modalContent = (0, import_cash_dom.default)("<div>").addClass("s1-json-modal-content").append($header).append($searchContainer).append($jsonContainer).append($buttonContainer);
     $modal.append($modalContent);
     (0, import_cash_dom.default)("body").append($modal);
     setTimeout(() => {
       var _a;
       return (_a = $searchInput.get(0)) == null ? void 0 : _a.focus();
-    }, 100);
+    }, FOCUS_DELAY_MS);
     $modal.on("click", function(e) {
       if (e.target === this) {
         (0, import_cash_dom.default)(this).remove();

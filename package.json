@@ -1,6 +1,6 @@
 {
   "name": "sentinelone-json-viewer",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Chrome extension to view SentinelOne event logs in JSON format",
   "type": "module",
   "scripts": {

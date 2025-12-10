@@ -1,23 +1,47 @@
 // SentinelOne JSON Viewer Content Script
+// A Chrome extension to view SentinelOne event logs in JSON format
+
 import { set } from 'lodash-es';
 import $ from 'cash-dom';
 
-// Constants for validation thresholds
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+// Validation thresholds for property extraction
 const MIN_KEY_LENGTH = 2;
 const MAX_KEY_LENGTH = 150;
 const MAX_SPECIAL_CHARS = 3;
 const MIN_PROPERTY_COUNT = 5;
 
-// Constants for search functionality
+// Search functionality settings
 const MIN_SEARCH_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 300;
 
-// Wait for the DOM to be ready and watch for changes
+// UI timing settings (milliseconds)
+const FOCUS_DELAY_MS = 100;
+const COPY_FEEDBACK_MS = 500;
+
+// Tree view settings
+const INDENT_PIXELS = 20;
+const RANDOM_ID_START = 2;
+const RANDOM_ID_END = 11;
+
+// =============================================================================
+// GLOBAL STATE
+// =============================================================================
+
 let observer = null;
 let jsonModalOpen = false;
 
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+/**
+ * Initialize the extension - set up mutation observer to detect event panels
+ */
 function init() {
-  // Use MutationObserver to detect when event panel opens
   observer = new MutationObserver(() => {
     checkAndInjectButton();
   });
@@ -27,27 +51,28 @@ function init() {
     subtree: true
   });
 
-  // Initial check
   checkAndInjectButton();
 }
 
+// =============================================================================
+// BUTTON INJECTION
+// =============================================================================
+
+/**
+ * Check for SentinelOne event panels and inject the JSON button
+ */
 function checkAndInjectButton() {
-  // Look for button groups that contain "See in Original Log" and "See in Thread Log"
-  // Check if container is already processed
   $('button').each(function() {
     const $btn = $(this);
     const text = $btn.text().trim();
     
-    // Found a "See in Thread Log" button
     if (text === 'See in Thread Log') {
       const $container = $btn.parent();
       
-      // Skip if already processed
       if ($container.attr('data-s1-json-processed') === 'true') {
-        return; // Continue to next
+        return;
       }
       
-      // Check if siblings include required buttons
       const $siblings = $container.find('button');
       let hasOriginalLog = false;
       let hasThreadLog = false;
@@ -60,21 +85,22 @@ function checkAndInjectButton() {
         if (siblingText === 'See as JSON' || this.dataset.s1JsonButton === 'true') hasJsonButton = true;
       });
       
-      // If we have both required buttons and no JSON button, inject it
       if (hasOriginalLog && hasThreadLog && !hasJsonButton) {
         $container.attr('data-s1-json-processed', 'true');
         injectJsonButton($container.get(0));
-        return false; // Break the loop
+        return false;
       }
     }
   });
 }
 
+/**
+ * Inject the "See as JSON" button into the container
+ */
 function injectJsonButton(container) {
   const $container = $(container);
   const $existingButton = $container.find('button').first();
   
-  // Create the JSON button with cash-dom
   const $jsonButton = $('<button>')
     .text('See as JSON')
     .addClass('s1-json-viewer-button')
@@ -85,13 +111,11 @@ function injectJsonButton(container) {
       extractAndShowJSON();
     });
   
-  // Copy classes from existing button if available
   if ($existingButton.length) {
     const existingClasses = $existingButton.attr('class');
     $jsonButton.attr('class', existingClasses + ' s1-json-viewer-button');
   }
   
-  // Insert after the last button
   const $lastButton = $container.find('button').last();
   if ($lastButton.length) {
     $lastButton.after($jsonButton);
@@ -100,6 +124,13 @@ function injectJsonButton(container) {
   }
 }
 
+// =============================================================================
+// DATA EXTRACTION
+// =============================================================================
+
+/**
+ * Main function to extract event data and show the JSON modal
+ */
 function extractAndShowJSON() {
   const eventData = {};
   
@@ -111,20 +142,17 @@ function extractAndShowJSON() {
     eventData.eventTime = eventTimeMatch[1];
   }
   
-  // Find and extract Event properties section
-  const $propertiesSection = findSection('Event properties');
+  // Extract properties from different sections
   let allProperties = {};
   
+  const $propertiesSection = findSection('Event properties');
   if ($propertiesSection?.length) {
-    const properties = extractProperties($propertiesSection);
-    allProperties = { ...allProperties, ...properties };
+    allProperties = { ...allProperties, ...extractProperties($propertiesSection) };
   }
   
-  // Find and extract Server info section
   const $serverInfoSection = findSection('Server info');
   if ($serverInfoSection?.length) {
-    const serverInfo = extractProperties($serverInfoSection);
-    allProperties = { ...allProperties, ...serverInfo };
+    allProperties = { ...allProperties, ...extractProperties($serverInfoSection) };
   }
   
   if (Object.keys(allProperties).length === 0) {
@@ -132,112 +160,34 @@ function extractAndShowJSON() {
     return;
   }
   
-  // Show JSON in modal (with flat properties for optional parsing)
   displayJSONModal(eventData, allProperties);
 }
 
 /**
- * Try to parse a JSON string value
- */
-function tryParseJSON(value) {
-  if (typeof value !== 'string') return value;
-  
-  // Check if it looks like JSON (starts with [ or {)
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
-    return value;
-  }
-  
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-/**
- * Recursively parse JSON strings in an object
- */
-function parseJSONStrings(obj) {
-  if (typeof obj !== 'object' || obj === null) {
-    return tryParseJSON(obj);
-  }
-  
-  if (Array.isArray(obj)) {
-    return obj.map(item => parseJSONStrings(item));
-  }
-  
-  const result = {};
-  Object.entries(obj).forEach(([key, value]) => {
-    result[key] = parseJSONStrings(value);
-  });
-  
-  return result;
-}
-
-/**
- * Converts flat dot-notation object to nested structure
- * Uses lodash.set for clean implementation
- */
-function convertToNestedObject(flatObj, parseJSON = false) {
-  const result = {};
-  
-  Object.entries(flatObj).forEach(([key, value]) => {
-    // Skip keys with ellipsis (truncated UI text)
-    if (key.includes('...')) return;
-    
-    // Clean the key - remove any empty segments
-    const cleanKey = key
-      .split('.')
-      .filter(segment => segment.trim().length > 0)
-      .join('.');
-    
-    // Only add if we have a valid key after cleaning
-    if (cleanKey && cleanKey.length > 0) {
-      set(result, cleanKey, value);
-    }
-  });
-  
-  // Parse JSON strings if requested
-  if (parseJSON) {
-    return parseJSONStrings(result);
-  }
-  
-  return result;
-}
-
-/**
- * Find a section by its heading text (e.g., "Event properties", "Server info")
+ * Find a section by its heading text
  */
 function findSection(sectionName) {
-  // Look for heading with the section name
   const $headings = $('h1, h2, h3, h4, h5, h6, div[class*="heading"], div[class*="title"], span[class*="heading"], span[class*="title"]');
-  
   let $section = null;
   
   $headings.each(function() {
     const text = $(this).text().trim();
     
     if (text === sectionName) {
-      // Try to find the container with the properties
       let $container = $(this).parent();
       
-      // Try to find a more specific container (not the whole page)
       while ($container.length && !$container.is('body')) {
         const classes = $container.attr('class') || '';
-        // Skip if it's the main shell/layout container
         if (classes.includes('Shell') || classes.includes('Layout_container')) {
           break;
         }
         
-        // Look for SentinelOne's specific property wrapper classes
         const $propertyWrappers = $container.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
         if ($propertyWrappers.length > MIN_PROPERTY_COUNT) {
           $section = $container;
           return false;
         }
         
-        // Fallback: Look for a container that has property rows inside (but be more lenient)
         const $collapsibleContent = $container.find('div[class*="collapsible-content"]');
         if ($collapsibleContent.length > 0) {
           $section = $container;
@@ -247,20 +197,23 @@ function findSection(sectionName) {
         $container = $container.parent();
       }
       
-      // If we didn't find a good container, use the immediate parent
       if (!$section?.length) {
         $section = $(this).parent();
       }
       
-      return false; // Break loop
+      return false;
     }
   });
   
   return $section;
 }
 
+// =============================================================================
+// PROPERTY VALIDATION
+// =============================================================================
+
 /**
- * Check if key contains UI-related text
+ * Check if key contains UI-related text that should be filtered out
  */
 function isUIElement(key) {
   return key.includes('See as JSON') || 
@@ -272,7 +225,7 @@ function isUIElement(key) {
 }
 
 /**
- * Check if key contains log format characters
+ * Check if key contains log format patterns that should be filtered out
  */
 function isLogFormat(key) {
   const timePattern = /\d{1,2}:\d{2}:\d{2}/;
@@ -287,82 +240,89 @@ function isLogFormat(key) {
 }
 
 /**
- * Checks if a key is a valid property name (not UI text or log format)
+ * Validate if a key is a valid property name
  */
 function isValidPropertyKey(key) {
-  // Basic validation
   if (!key || key.length < MIN_KEY_LENGTH || key.length > MAX_KEY_LENGTH) return false;
-  
-  // Skip UI elements and log formats
   if (isUIElement(key) || isLogFormat(key)) return false;
   
-  // Skip keys with emojis (log messages)
   const emojiPattern = /[\u{1F000}-\u{1F9FF}]/u;
   if (emojiPattern.test(key)) return false;
   
-  // Should look like a property path (alphanumeric, dots, underscores, hyphens)
   const specialChars = (key.match(/[^a-zA-Z0-9._-]/g) || []).length;
   return specialChars <= MAX_SPECIAL_CHARS;
 }
 
 /**
- * Cleans and validates a property value
+ * Clean and validate a property value
  */
 function cleanPropertyValue(value) {
   if (!value) return null;
-  
   return value.trim();
 }
 
+// =============================================================================
+// PROPERTY EXTRACTION STRATEGIES
+// =============================================================================
+
 /**
- * Extract properties from SentinelOne's property wrapper structure
+ * Extract the property key from a label wrapper element
+ */
+function extractKeyFromLabel($labelWrapper) {
+  // Try title attribute first
+  let key = $labelWrapper.attr('title');
+  if (key) return key;
+  
+  // Try child element with title
+  const $childWithTitle = $labelWrapper.find('[title]').first();
+  if ($childWithTitle.length) {
+    key = $childWithTitle.attr('title');
+    if (key) return key;
+  }
+  
+  // Fall back to text content
+  return $labelWrapper.text().trim();
+}
+
+/**
+ * Process a single property wrapper and add to properties object
+ */
+function processPropertyWrapper($wrapper, properties) {
+  const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
+  if (!$innerDiv.length) return;
+  
+  const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
+  const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
+  
+  if (!$labelWrapper.length || !$valueWrapper.length) return;
+  
+  const key = extractKeyFromLabel($labelWrapper);
+  const value = $valueWrapper.text().trim();
+  
+  if (!isValidPropertyKey(key)) return;
+  
+  const cleanedValue = cleanPropertyValue(value);
+  if (cleanedValue) {
+    properties[key] = cleanedValue;
+  }
+}
+
+/**
+ * Extract properties from SentinelOne's specific DOM structure
  */
 function extractFromPropertyWrappers($content) {
   const properties = {};
   const $propertyWrappers = $content.find('div[class*="GyObjectAttribute-module_root-wrapper"]');
   
   $propertyWrappers.each(function() {
-    const $wrapper = $(this);
-    const $innerDiv = $wrapper.find('div[class*="EventDetailField_container"]');
-    
-    if ($innerDiv.length) {
-      const $labelWrapper = $innerDiv.find('div[class*="label-wrapper"]');
-      const $valueWrapper = $innerDiv.find('div[class*="value-wrapper"]');
-      
-      if ($labelWrapper.length && $valueWrapper.length) {
-        // Try to get full key from title attribute (check wrapper and child elements)
-        let key = $labelWrapper.attr('title');
-        
-        // If no title on wrapper, check child elements (like span)
-        if (!key) {
-          const $childWithTitle = $labelWrapper.find('[title]').first();
-          if ($childWithTitle.length) {
-            key = $childWithTitle.attr('title');
-          }
-        }
-        
-        // Fallback to text content if no title found
-        if (!key) {
-          key = $labelWrapper.text().trim();
-        }
-        
-        const value = $valueWrapper.text().trim();
-        
-        if (isValidPropertyKey(key)) {
-          const cleanedValue = cleanPropertyValue(value);
-          if (cleanedValue) {
-            properties[key] = cleanedValue;
-          }
-        }
-      }
-    }
+    processPropertyWrapper($(this), properties);
   });
   
   return properties;
 }
 
 /**
- * Try to extract key-value from a row with 2 children
+ * Extract key-value from a row with 2 children
  */
 function extractFromTwoChildren($children, properties) {
   const key = $children.eq(0).text().trim();
@@ -377,7 +337,7 @@ function extractFromTwoChildren($children, properties) {
 }
 
 /**
- * Try to extract key-value from spans/divs inside a row
+ * Extract key-value from spans/divs inside a row
  */
 function extractFromSpans($row, properties) {
   const $spans = $row.find('span, div, td');
@@ -415,10 +375,12 @@ function extractFromGenericStructure($container) {
   return properties;
 }
 
+/**
+ * Main property extraction function - tries multiple strategies
+ */
 function extractProperties($container) {
-  // Find the collapsible content div (where properties actually are)
+  // Strategy 1: SentinelOne's specific property wrappers
   const $content = $container.find('div[class*="collapsible-content"]');
-  
   if ($content.length) {
     const properties = extractFromPropertyWrappers($content);
     if (Object.keys(properties).length > 0) {
@@ -426,13 +388,13 @@ function extractProperties($container) {
     }
   }
   
-  // Fallback: Try generic structure extraction
+  // Strategy 2: Generic structure extraction
   const properties = extractFromGenericStructure($container);
   if (Object.keys(properties).length > 0) {
     return properties;
   }
   
-  // Last resort: Parse visible text
+  // Strategy 3: Parse visible text as last resort
   const textProperties = {};
   const text = $container.text();
   const lines = text.split('\n').filter(line => line.trim());
@@ -457,6 +419,80 @@ function extractProperties($container) {
   return textProperties;
 }
 
+// =============================================================================
+// JSON TRANSFORMATION
+// =============================================================================
+
+/**
+ * Try to parse a string as JSON
+ */
+function tryParseJSON(value) {
+  if (typeof value !== 'string') return value;
+  
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+    return value;
+  }
+  
+  try {
+    return JSON.parse(value);
+  } catch {
+    // Intentional: Value is not valid JSON, return original string
+    // This is expected behavior for non-JSON strings
+    return value;
+  }
+}
+
+/**
+ * Recursively parse JSON strings in an object
+ */
+function parseJSONStrings(obj) {
+  if (typeof obj !== 'object' || obj === null) {
+    return tryParseJSON(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => parseJSONStrings(item));
+  }
+  
+  const result = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    result[key] = parseJSONStrings(value);
+  });
+  
+  return result;
+}
+
+/**
+ * Convert flat dot-notation object to nested structure
+ */
+function convertToNestedObject(flatObj, parseJSON = false) {
+  const result = {};
+  
+  Object.entries(flatObj).forEach(([key, value]) => {
+    if (key.includes('...')) return;
+    
+    const cleanKey = key
+      .split('.')
+      .filter(segment => segment.trim().length > 0)
+      .join('.');
+    
+    if (cleanKey && cleanKey.length > 0) {
+      set(result, cleanKey, value);
+    }
+  });
+  
+  if (parseJSON) {
+    return parseJSONStrings(result);
+  }
+  
+  return result;
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
 /**
  * Escape HTML special characters
  */
@@ -467,45 +503,318 @@ function escapeHtml(text) {
 }
 
 /**
- * Create search functionality for JSON modal
+ * Fallback copy using textarea (for older browsers)
  */
-function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
+function fallbackCopyToClipboard(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    document.execCommand('copy');  // eslint-disable-line
+  } finally {
+    textarea.remove();
+  }
+}
+
+/**
+ * Copy text to clipboard with fallback
+ */
+function copyToClipboard(text, onSuccess) {
+  navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+    fallbackCopyToClipboard(text);
+    onSuccess();
+  });
+}
+
+// =============================================================================
+// JSON TREE VIEW RENDERING
+// =============================================================================
+
+/**
+ * Get the type of a value for JSON rendering
+ */
+function getValueType(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+/**
+ * Generate a unique ID for tree elements
+ */
+function generateTreeId() {
+  return `tree-${Math.random().toString(36).substring(RANDOM_ID_START, RANDOM_ID_END)}`;
+}
+
+/**
+ * Encode a value to Base64 for storage in data attributes
+ * Using TextEncoder for modern browsers (avoids deprecated unescape)
+ */
+function encodeToBase64(value) {
+  const jsonStr = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(jsonStr);
+  const binString = Array.from(bytes, byte => String.fromCodePoint(byte)).join('');
+  return btoa(binString);
+}
+
+/**
+ * Decode Base64 string back to JSON
+ */
+function decodeFromBase64(base64) {
+  const binString = atob(base64);
+  const bytes = Uint8Array.from(binString, char => char.codePointAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Get the display value for a primitive type
+ */
+function getPrimitiveDisplayValue(value, type) {
+  if (type === 'string') {
+    return `"${escapeHtml(value)}"`;
+  }
+  if (type === 'null') {
+    return 'null';
+  }
+  return value;
+}
+
+/**
+ * Render a primitive JSON value (string, number, boolean, null)
+ */
+function renderPrimitiveHtml(value, type) {
+  const typeClassMap = {
+    string: 'json-tree-string',
+    number: 'json-tree-number',
+    boolean: 'json-tree-boolean',
+    null: 'json-tree-null'
+  };
+  
+  const className = typeClassMap[type];
+  const displayValue = getPrimitiveDisplayValue(value, type);
+  
+  return `<span class="${className}">${displayValue}</span>`;
+}
+
+/**
+ * Create the key part of a JSON tree line
+ */
+function createKeyHtml(key, isArrayIndex) {
+  if (isArrayIndex) {
+    return `<span class="json-tree-index">[${escapeHtml(key)}]</span>`;
+  }
+  return `<span class="json-tree-key">"${escapeHtml(key)}"</span><span class="json-tree-colon">: </span>`;
+}
+
+/**
+ * Render JSON data as an interactive collapsible tree view
+ */
+function renderJSONTree(data, isExpanded = true) {
+  let lineNumber = 0;
+
+  function lineNum() {
+    lineNumber++;
+    return `<span class="json-tree-line-number">${lineNumber}</span>`;
+  }
+
+  function renderValue(value, key, level = 0, isArrayIndex = false, isLast = true) {
+    const type = getValueType(value);
+    const indent = level * INDENT_PIXELS;
+    const keyPart = createKeyHtml(key, isArrayIndex);
+    const comma = isLast ? '' : '<span class="json-tree-comma">,</span>';
+
+    // Object rendering
+    if (type === 'object' && value !== null) {
+      const entries = Object.entries(value);
+      if (entries.length === 0) {
+        return `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;">${keyPart}<span class="json-tree-bracket">{}</span>${comma}</span></div>`;
+      }
+
+      const id = generateTreeId();
+      const jsonBase64 = encodeToBase64(value);
+      const expandedClass = isExpanded ? 'expanded' : '';
+      
+      const openLine = `<div class="json-tree-line json-tree-collapsible" data-json-b64="${jsonBase64}" data-target="${id}">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><button class="json-tree-toggle ${expandedClass}" data-target="${id}">▶</button>${keyPart}<span class="json-tree-bracket">{</span><span class="json-tree-count">${entries.length} properties</span></span></div>`;
+      const childrenHtml = entries.map(([k, v], idx) => renderValue(v, k, level + 1, false, idx === entries.length - 1)).join('');
+      const closeLine = `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><span class="json-tree-bracket">}</span>${comma}</span></div>`;
+
+      return `${openLine}<div class="json-tree-children ${expandedClass}" id="${id}">${childrenHtml}</div>${closeLine}`;
+    }
+
+    // Array rendering
+    if (type === 'array') {
+      if (value.length === 0) {
+        return `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;">${keyPart}<span class="json-tree-bracket">[]</span>${comma}</span></div>`;
+      }
+
+      const id = generateTreeId();
+      const jsonBase64 = encodeToBase64(value);
+      const expandedClass = isExpanded ? 'expanded' : '';
+      
+      const openLine = `<div class="json-tree-line json-tree-collapsible" data-json-b64="${jsonBase64}" data-target="${id}">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><button class="json-tree-toggle ${expandedClass}" data-target="${id}">▶</button>${keyPart}<span class="json-tree-bracket">[</span><span class="json-tree-count">${value.length} items</span></span></div>`;
+      const childrenHtml = value.map((item, idx) => renderValue(item, idx.toString(), level + 1, true, idx === value.length - 1)).join('');
+      const closeLine = `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;"><span class="json-tree-bracket">]</span>${comma}</span></div>`;
+
+      return `${openLine}<div class="json-tree-children ${expandedClass}" id="${id}">${childrenHtml}</div>${closeLine}`;
+    }
+
+    // Primitive value rendering
+    const valueHtml = renderPrimitiveHtml(value, type);
+    return `<div class="json-tree-line">${lineNum()}<span class="json-tree-content" style="padding-left: ${indent}px;">${keyPart}${valueHtml}${comma}</span></div>`;
+  }
+
+  // Render root object
+  const type = getValueType(data);
+  if (type === 'object' && data !== null) {
+    const entries = Object.entries(data);
+    const rootJsonB64 = encodeToBase64(data);
+    const openLine = `<div class="json-tree-line json-tree-collapsible json-tree-root-line" data-json-b64="${rootJsonB64}">${lineNum()}<span class="json-tree-content"><span class="json-tree-bracket">{</span><span class="json-tree-count">${entries.length} properties · double-click to copy all</span></span></div>`;
+    const childrenHtml = entries.map(([k, v], idx) => renderValue(v, k, 1, false, idx === entries.length - 1)).join('');
+    const closeLine = `<div class="json-tree-line">${lineNum()}<span class="json-tree-content"><span class="json-tree-bracket">}</span></span></div>`;
+
+    return `<div class="json-tree-root">${openLine}${childrenHtml}${closeLine}</div>`;
+  }
+
+  return `<div class="json-tree-root">${renderValue(data, 'root', 0, false, true)}</div>`;
+}
+
+// =============================================================================
+// TREE VIEW INTERACTIONS
+// =============================================================================
+
+/**
+ * Handle double-click on a collapsible JSON tree element to copy its content
+ */
+function handleTreeDoubleClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const targetElement = event.currentTarget;
+  const jsonB64 = targetElement.dataset.jsonB64;
+  
+  if (!jsonB64) return;
+  
+  try {
+    const json = decodeFromBase64(jsonB64);
+    const parsed = JSON.parse(json);
+    const formatted = JSON.stringify(parsed, null, 2);
+    
+    copyToClipboard(formatted, () => {
+      targetElement.classList.add('json-tree-copied');
+      setTimeout(() => targetElement.classList.remove('json-tree-copied'), COPY_FEEDBACK_MS);
+    });
+  } catch {
+    // Intentional: JSON parsing or clipboard operation failed
+    // User feedback is provided via visual indication only
+  }
+}
+
+/**
+ * Initialize tree view toggle buttons and double-click copy handlers
+ */
+function initTreeToggles($container) {
+  // Single click on toggle button - expand/collapse
+  $container.find('.json-tree-toggle').on('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const $btn = $(this);
+    const targetId = $btn.attr('data-target');
+    const $target = $(`#${targetId}`);
+    
+    $btn.toggleClass('expanded');
+    $target.toggleClass('expanded');
+  });
+
+  // Double-click on collapsible line - copy full JSON
+  const collapsibleElements = $container.find('.json-tree-collapsible').get();
+  collapsibleElements.forEach(el => {
+    el.addEventListener('dblclick', handleTreeDoubleClick);
+  });
+}
+
+// =============================================================================
+// SEARCH FUNCTIONALITY
+// =============================================================================
+
+/**
+ * Create search functionality for the JSON tree view
+ * @param {Object} options - Search configuration
+ * @param {Function} options.getJsonString - Function to get current JSON string
+ * @param {Object} options.$displayElement - jQuery element containing the tree view
+ * @param {Object} options.$searchInfo - jQuery element for search info text
+ * @param {Object} options.$prevBtn - jQuery element for previous button
+ * @param {Object} options.$nextBtn - jQuery element for next button
+ * @param {Object} options.$searchInput - jQuery element for search input
+ */
+function createSearchFunctionality(options) {
+  const { getJsonString, $displayElement, $searchInfo, $prevBtn, $nextBtn, $searchInput } = options;
+  
   let currentMatchIndex = -1;
   let matches = [];
   
   function highlightMatches(searchTerm) {
-    const jsonString = getJsonString();
-    let highlighted = '';
-    let lastIndex = 0;
+    const lowerSearch = searchTerm.toLowerCase();
+    const $treeView = $displayElement.find('.json-tree-root');
     
-    matches.forEach((matchPos, idx) => {
-      highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
-      highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? 'current' : ''}" data-match-idx="${idx}">`;
-      highlighted += escapeHtml(jsonString.substring(matchPos, matchPos + searchTerm.length));
-      highlighted += '</mark>';
-      lastIndex = matchPos + searchTerm.length;
+    if (!$treeView.length) return;
+    
+    const $textElements = $treeView.find('.json-tree-string, .json-tree-number, .json-tree-boolean, .json-tree-key, .json-tree-index');
+    
+    // Normalize all text elements first
+    $textElements.each(function() {
+      const $el = $(this);
+      $el.text($el.text());
     });
     
-    highlighted += escapeHtml(jsonString.substring(lastIndex));
-    $codeElement.html(highlighted);
+    // Apply highlights
+    let matchIndex = 0;
+    $textElements.each(function() {
+      const $el = $(this);
+      const text = $el.text();
+      const lowerText = text.toLowerCase();
+      
+      if (lowerText.includes(lowerSearch)) {
+        let highlighted = '';
+        let lastIndex = 0;
+        let pos = 0;
+        
+        while ((pos = lowerText.indexOf(lowerSearch, lastIndex)) !== -1) {
+          highlighted += escapeHtml(text.substring(lastIndex, pos));
+          highlighted += `<mark class="s1-json-search-highlight ${matchIndex === currentMatchIndex ? 'current' : ''}" data-match-idx="${matchIndex}">`;
+          highlighted += escapeHtml(text.substring(pos, pos + searchTerm.length));
+          highlighted += '</mark>';
+          lastIndex = pos + searchTerm.length;
+          matchIndex++;
+        }
+        
+        highlighted += escapeHtml(text.substring(lastIndex));
+        $el.html(highlighted);
+      }
+    });
   }
   
   function scrollToMatch(index) {
-    const $marks = $codeElement.find('mark');
+    const $marks = $displayElement.find('mark');
     $marks.removeClass('current');
     
     if (index >= 0 && index < matches.length) {
       const $currentMark = $marks.eq(index);
       $currentMark.addClass('current');
       
-      // Scroll to the match using scrollIntoView for better reliability
+      // Expand parent nodes
+      $currentMark.parents('.json-tree-children').each(function() {
+        $(this).addClass('expanded');
+        const id = $(this).attr('id');
+        $(`.json-tree-toggle[data-target="${id}"]`).addClass('expanded');
+      });
+      
       const markElement = $currentMark.get(0);
       if (markElement) {
-        markElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-          inline: 'nearest'
-        });
+        markElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
       }
     }
   }
@@ -513,6 +822,8 @@ function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, 
   function updateSearchInfo() {
     if (matches.length > 0) {
       $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
+    } else {
+      $searchInfo.text('');
     }
   }
   
@@ -525,27 +836,33 @@ function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, 
       currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
     }
     
+    highlightMatches($searchInput.val());
     scrollToMatch(currentMatchIndex);
     updateSearchInfo();
-    highlightMatches($searchInput.val());
   }
   
   function performSearch(searchTerm) {
     const jsonString = getJsonString();
-    
-    // Reset highlighting
-    $codeElement.html(escapeHtml(jsonString));
     matches = [];
     currentMatchIndex = -1;
     
     if (!searchTerm || searchTerm.length < MIN_SEARCH_LENGTH) {
+      // Clear highlights
+      const $treeView = $displayElement.find('.json-tree-root');
+      if ($treeView.length) {
+        const $textElements = $treeView.find('.json-tree-string, .json-tree-number, .json-tree-boolean, .json-tree-key, .json-tree-index');
+        $textElements.each(function() {
+          $(this).text($(this).text());
+        });
+      }
+      
       $searchInfo.text('');
       $prevBtn.prop('disabled', true);
       $nextBtn.prop('disabled', true);
       return;
     }
     
-    // Find all matches (case-insensitive)
+    // Find matches in JSON string
     const lowerJson = jsonString.toLowerCase();
     const lowerSearch = searchTerm.toLowerCase();
     let pos = 0;
@@ -562,7 +879,6 @@ function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, 
       return;
     }
     
-    // Highlight all matches
     highlightMatches(searchTerm);
     currentMatchIndex = 0;
     scrollToMatch(0);
@@ -571,14 +887,18 @@ function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, 
     $nextBtn.prop('disabled', false);
   }
   
-  return {
-    performSearch,
-    navigateToMatch
-  };
+  return { performSearch, navigateToMatch };
 }
 
+// =============================================================================
+// MODAL DISPLAY
+// =============================================================================
+
+/**
+ * Display the JSON modal with all features
+ */
 function displayJSONModal(eventData, flatProperties) {
-  // Remove existing modal if any
+  // Toggle modal if already open
   const $existing = $('#s1-json-modal');
   if ($existing.length) {
     $existing.remove();
@@ -588,50 +908,20 @@ function displayJSONModal(eventData, flatProperties) {
   
   jsonModalOpen = true;
   
-  // Create modal with cash-dom
-  const $modal = $('<div>')
-    .attr('id', 's1-json-modal')
-    .addClass('s1-json-modal');
-  
-  // State for JSON parsing
-  let parseJSONStrings = false;
+  // State
+  let parseJSONStringsEnabled = false;
+  let jsonString = '';
   
   function getJSONData() {
     const data = { ...eventData };
-    data.properties = convertToNestedObject(flatProperties, parseJSONStrings);
+    data.properties = convertToNestedObject(flatProperties, parseJSONStringsEnabled);
     return data;
   }
   
-  let jsonString = JSON.stringify(getJSONData(), null, 2);
+  // Create modal structure
+  const $modal = $('<div>').attr('id', 's1-json-modal').addClass('s1-json-modal');
   
-  // Create search bar
-  const $searchContainer = $('<div>').addClass('s1-json-search-container');
-  const $searchInput = $('<input>')
-    .attr('type', 'text')
-    .attr('placeholder', 'Search in JSON...')
-    .addClass('s1-json-search-input');
-  
-  const $searchInfo = $('<span>')
-    .addClass('s1-json-search-info')
-    .text('');
-  
-  const $searchNav = $('<div>').addClass('s1-json-search-nav');
-  const $prevBtn = $('<button>')
-    .text('↑')
-    .addClass('s1-json-search-nav-btn')
-    .attr('title', 'Previous match')
-    .prop('disabled', true);
-  
-  const $nextBtn = $('<button>')
-    .text('↓')
-    .addClass('s1-json-search-nav-btn')
-    .attr('title', 'Next match')
-    .prop('disabled', true);
-  
-  $searchNav.append($prevBtn).append($nextBtn);
-  $searchContainer.append($searchInput).append($searchInfo).append($searchNav);
-  
-  // Build modal structure with cash-dom
+  // Header
   const $header = $('<div>').addClass('s1-json-modal-header')
     .append($('<h2>').text('Event JSON'))
     .append(
@@ -644,90 +934,86 @@ function displayJSONModal(eventData, flatProperties) {
         })
     );
   
-  const $codeElement = $('<code>').text(jsonString);
-  const $jsonContainer = $('<div>').addClass('s1-json-container')
-    .append(
-      $('<pre>').addClass('s1-json-pre')
-        .append($codeElement)
-    );
+  // Search bar
+  const $searchContainer = $('<div>').addClass('s1-json-search-container');
+  const $searchInput = $('<input>')
+    .attr('type', 'text')
+    .attr('placeholder', 'Search in JSON...')
+    .addClass('s1-json-search-input');
+  const $searchInfo = $('<span>').addClass('s1-json-search-info');
+  const $searchNav = $('<div>').addClass('s1-json-search-nav');
+  const $prevBtn = $('<button>').text('↑').addClass('s1-json-search-nav-btn').attr('title', 'Previous match').prop('disabled', true);
+  const $nextBtn = $('<button>').text('↓').addClass('s1-json-search-nav-btn').attr('title', 'Next match').prop('disabled', true);
   
-  // Initialize search functionality
-  const search = createSearchFunctionality(
-    () => jsonString, 
-    $codeElement, 
-    $jsonContainer, 
-    $searchInfo, 
-    $prevBtn, 
-    $nextBtn, 
+  $searchNav.append($prevBtn).append($nextBtn);
+  $searchContainer.append($searchInput).append($searchInfo).append($searchNav);
+  
+  // JSON display
+  const $jsonContainer = $('<div>').addClass('s1-json-container');
+  const $jsonDisplay = $('<div>').addClass('s1-json-display');
+  $jsonContainer.append($jsonDisplay);
+  
+  function updateDisplay() {
+    const jsonData = getJSONData();
+    jsonString = JSON.stringify(jsonData, null, 2);
+    
+    $jsonDisplay.html(renderJSONTree(jsonData, true));
+    $jsonDisplay.addClass('s1-json-tree-view');
+    initTreeToggles($jsonDisplay);
+    
+    $searchInput.val('');
+    $searchInfo.text('');
+    $prevBtn.prop('disabled', true);
+    $nextBtn.prop('disabled', true);
+  }
+  
+  updateDisplay();
+  
+  // Initialize search
+  const search = createSearchFunctionality({
+    getJsonString: () => jsonString,
+    $displayElement: $jsonDisplay,
+    $searchInfo,
+    $prevBtn,
+    $nextBtn,
     $searchInput
-  );
+  });
   
-  // Search input event
   let searchTimeout;
   $searchInput.on('input', function() {
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-      search.performSearch($(this).val());
-    }, SEARCH_DEBOUNCE_MS);
+    searchTimeout = setTimeout(() => search.performSearch($(this).val()), SEARCH_DEBOUNCE_MS);
   });
   
-  // Navigation buttons
   $prevBtn.on('click', () => search.navigateToMatch('prev'));
   $nextBtn.on('click', () => search.navigateToMatch('next'));
   
-  // Keyboard shortcuts in search
   $searchInput.on('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.shiftKey) {
-        search.navigateToMatch('prev');
-      } else {
-        search.navigateToMatch('next');
-      }
+      search.navigateToMatch(e.shiftKey ? 'prev' : 'next');
     } else if (e.key === 'Escape') {
       $searchInput.val('');
       search.performSearch('');
     }
   });
   
+  // Action buttons
   const $parseToggle = $('<button>')
     .text('🔄 Parse JSON Strings')
     .addClass('s1-json-parse-btn')
     .attr('title', 'Automatically parse JSON strings into objects')
     .on('click', function() {
       const $btn = $(this);
-      parseJSONStrings = !parseJSONStrings;
+      parseJSONStringsEnabled = !parseJSONStringsEnabled;
       
-      // Update button state
-      if (parseJSONStrings) {
-        $btn.text('✓ JSON Strings Parsed');
-        $btn.addClass('active');
+      if (parseJSONStringsEnabled) {
+        $btn.text('✓ JSON Strings Parsed').addClass('active');
       } else {
-        $btn.text('🔄 Parse JSON Strings');
-        $btn.removeClass('active');
+        $btn.text('🔄 Parse JSON Strings').removeClass('active');
       }
       
-      // Regenerate JSON with new parsing state
-      jsonString = JSON.stringify(getJSONData(), null, 2);
-      $codeElement.text(jsonString);
-      
-      // Re-run search if there's a search term
-      const searchTerm = $searchInput.val();
-      if (searchTerm && searchTerm.length >= MIN_SEARCH_LENGTH) {
-        search.performSearch(searchTerm);
-      }
-    });
-  
-  const $copyBtn = $('<button>')
-    .text('Copy to Clipboard')
-    .addClass('s1-json-copy-btn')
-    .on('click', function() {
-      const $btn = $(this);
-      navigator.clipboard.writeText(jsonString).then(() => {
-        const originalText = $btn.text();
-        $btn.text('✓ Copied!');
-        setTimeout(() => $btn.text(originalText), 2000);
-      });
+      updateDisplay();
     });
   
   const $downloadBtn = $('<button>')
@@ -736,20 +1022,14 @@ function displayJSONModal(eventData, flatProperties) {
     .on('click', () => {
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const $a = $('<a>')
-        .attr('href', url)
-        .attr('download', `sentinelone-event-${Date.now()}.json`)
-        .get(0);
+      const $a = $('<a>').attr('href', url).attr('download', `sentinelone-event-${Date.now()}.json`).get(0);
       $a.click();
       URL.revokeObjectURL(url);
     });
   
-  const $buttonContainer = $('<div>')
-    .addClass('s1-json-button-container')
-    .append($parseToggle)
-    .append($copyBtn)
-    .append($downloadBtn);
+  const $buttonContainer = $('<div>').addClass('s1-json-button-container').append($parseToggle).append($downloadBtn);
   
+  // Assemble modal
   const $modalContent = $('<div>')
     .addClass('s1-json-modal-content')
     .append($header)
@@ -760,10 +1040,9 @@ function displayJSONModal(eventData, flatProperties) {
   $modal.append($modalContent);
   $('body').append($modal);
   
-  // Focus search input (get DOM element from cash-dom wrapper)
-  setTimeout(() => $searchInput.get(0)?.focus(), 100);
+  // Focus search and setup close handlers
+  setTimeout(() => $searchInput.get(0)?.focus(), FOCUS_DELAY_MS);
   
-  // Close on outside click
   $modal.on('click', function(e) {
     if (e.target === this) {
       $(this).remove();
@@ -771,7 +1050,6 @@ function displayJSONModal(eventData, flatProperties) {
     }
   });
   
-  // Close on Escape key
   const escapeHandler = (e) => {
     if (e.key === 'Escape' && jsonModalOpen) {
       $modal.remove();
@@ -782,7 +1060,10 @@ function displayJSONModal(eventData, flatProperties) {
   $(document).on('keydown', escapeHandler);
 }
 
-// Initialize when page loads
+// =============================================================================
+// ENTRY POINT
+// =============================================================================
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {

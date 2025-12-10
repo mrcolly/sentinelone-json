@@ -156,15 +156,20 @@
   flex-direction: column;
 }
 
-.s1-json-pre {
-  margin: 0;
-  background: #0d1117;
-  border-radius: 6px;
-  padding: 20px;
-  border: 1px solid #30363d;
-  overflow: auto;
+.s1-json-display {
   flex: 1;
   min-height: 0;
+  overflow: auto;
+  background: #0d1117;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  padding: 20px;
+}
+
+.s1-json-pre {
+  margin: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .s1-json-pre code {
@@ -178,6 +183,145 @@
   min-width: 100%;
 }
 
+/* JSON Tree View Styles */
+.json-tree-root {
+  font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, source-code-pro, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c9d1d9;
+}
+
+.json-tree-line {
+  display: flex;
+  align-items: flex-start;
+  min-height: 24px;
+}
+
+.json-tree-line-number {
+  min-width: 45px;
+  padding-right: 12px;
+  text-align: right;
+  color: #6e7681;
+  font-size: 12px;
+  user-select: none;
+  flex-shrink: 0;
+  border-right: 1px solid #30363d;
+  margin-right: 12px;
+}
+
+.json-tree-content {
+  display: inline;
+  flex: 1;
+}
+
+.json-tree-toggle {
+  background: none;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin-right: 4px;
+  font-size: 10px;
+  transition: transform 0.2s ease, color 0.2s ease;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.json-tree-toggle:hover {
+  background: #30363d;
+  color: #c9d1d9;
+}
+
+.json-tree-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.json-tree-children {
+  display: none;
+}
+
+.json-tree-children.expanded {
+  display: block;
+}
+
+.json-tree-key {
+  color: #79c0ff;
+}
+
+.json-tree-colon {
+  color: #c9d1d9;
+}
+
+.json-tree-index {
+  color: #8b949e;
+  margin-right: 6px;
+  font-style: italic;
+  user-select: none;
+}
+
+.json-tree-count {
+  color: #6e7681;
+  font-size: 12px;
+  margin-left: 8px;
+  font-style: italic;
+  user-select: none;
+}
+
+.json-tree-string {
+  color: #a5d6ff;
+}
+
+.json-tree-number {
+  color: #79c0ff;
+}
+
+.json-tree-boolean {
+  color: #ffa657;
+}
+
+.json-tree-null {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.json-tree-bracket {
+  color: #c9d1d9;
+  margin: 0 2px;
+}
+
+.json-tree-comma {
+  color: #c9d1d9;
+}
+
+.json-tree-collapsible {
+  cursor: pointer;
+}
+
+.json-tree-collapsible:not(.json-tree-root-line):hover .json-tree-count::after {
+  content: " · double-click to copy";
+  color: #6e7681;
+  font-size: 11px;
+}
+
+.json-tree-root-line {
+  margin-bottom: 2px;
+}
+
+.json-tree-root-line .json-tree-count {
+  font-size: 12px;
+}
+
+.json-tree-copied {
+  background: rgb(16 185 129 / 30%) !important;
+  transition: background 0.2s;
+}
+
 /* Button container */
 .s1-json-button-container {
   display: flex;
@@ -188,7 +332,6 @@
 }
 
 .s1-json-parse-btn,
-.s1-json-copy-btn,
 .s1-json-download-btn {
   padding: 10px 20px;
   border: none;
@@ -206,68 +349,56 @@
 }
 
 .s1-json-parse-btn {
-  background: #8b5cf6;
+  background: #7c3aed;
   color: white;
 }
 
 .s1-json-parse-btn:hover {
-  background: #7c3aed;
+  background: #6d28d9;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgb(139 92 246 / 30%);
 }
 
 .s1-json-parse-btn.active {
-  background: #10b981;
+  background: #047857;
 }
 
 .s1-json-parse-btn.active:hover {
-  background: #0ea572;
+  background: #065f46;
   box-shadow: 0 4px 12px rgb(16 185 129 / 30%);
 }
 
-.s1-json-copy-btn {
-  background: #6366f1;
-  color: white;
-}
-
-.s1-json-copy-btn:hover {
-  background: #5558e3;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgb(99 102 241 / 30%);
-}
-
 .s1-json-download-btn {
-  background: #10b981;
+  background: #047857;
   color: white;
 }
 
 .s1-json-download-btn:hover {
-  background: #0ea572;
+  background: #065f46;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgb(16 185 129 / 30%);
 }
 
 .s1-json-parse-btn:active,
-.s1-json-copy-btn:active,
 .s1-json-download-btn:active {
   transform: translateY(0);
 }
 
 /* Scrollbar styling for modal */
-.s1-json-pre::-webkit-scrollbar {
+.s1-json-display::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-.s1-json-pre::-webkit-scrollbar-track {
+.s1-json-display::-webkit-scrollbar-track {
   background: #0d1117;
 }
 
-.s1-json-pre::-webkit-scrollbar-thumb {
+.s1-json-display::-webkit-scrollbar-thumb {
   background: #444;
   border-radius: 5px;
 }
 
-.s1-json-pre::-webkit-scrollbar-thumb:hover {
+.s1-json-display::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
