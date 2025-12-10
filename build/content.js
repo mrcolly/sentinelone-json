@@ -2007,15 +2007,129 @@
     jsonModalOpen = true;
     const $modal = (0, import_cash_dom.default)("<div>").attr("id", "s1-json-modal").addClass("s1-json-modal");
     const jsonString = JSON.stringify(data, null, 2);
+    const $searchContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-container");
+    const $searchInput = (0, import_cash_dom.default)("<input>").attr("type", "text").attr("placeholder", "Search in JSON...").addClass("s1-json-search-input");
+    const $searchInfo = (0, import_cash_dom.default)("<span>").addClass("s1-json-search-info").text("");
+    const $searchNav = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-nav");
+    const $prevBtn = (0, import_cash_dom.default)("<button>").text("\u2191").addClass("s1-json-search-nav-btn").attr("title", "Previous match").prop("disabled", true);
+    const $nextBtn = (0, import_cash_dom.default)("<button>").text("\u2193").addClass("s1-json-search-nav-btn").attr("title", "Next match").prop("disabled", true);
+    $searchNav.append($prevBtn).append($nextBtn);
+    $searchContainer.append($searchInput).append($searchInfo).append($searchNav);
     const $header = (0, import_cash_dom.default)("<div>").addClass("s1-json-modal-header").append((0, import_cash_dom.default)("<h2>").text("Event JSON")).append(
       (0, import_cash_dom.default)("<button>").text("\xD7").addClass("s1-json-modal-close").on("click", () => {
         $modal.remove();
         jsonModalOpen = false;
       })
     );
+    const $codeElement = (0, import_cash_dom.default)("<code>").text(jsonString);
     const $jsonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-container").append(
-      (0, import_cash_dom.default)("<pre>").addClass("s1-json-pre").append((0, import_cash_dom.default)("<code>").text(jsonString))
+      (0, import_cash_dom.default)("<pre>").addClass("s1-json-pre").append($codeElement)
     );
+    let currentMatchIndex = -1;
+    let matches = [];
+    function performSearch(searchTerm) {
+      $codeElement.html(escapeHtml(jsonString));
+      matches = [];
+      currentMatchIndex = -1;
+      if (!searchTerm || searchTerm.length < 2) {
+        $searchInfo.text("");
+        $prevBtn.prop("disabled", true);
+        $nextBtn.prop("disabled", true);
+        return;
+      }
+      const lowerJson = jsonString.toLowerCase();
+      const lowerSearch = searchTerm.toLowerCase();
+      let pos = 0;
+      while ((pos = lowerJson.indexOf(lowerSearch, pos)) !== -1) {
+        matches.push(pos);
+        pos += searchTerm.length;
+      }
+      if (matches.length === 0) {
+        $searchInfo.text("No matches");
+        $prevBtn.prop("disabled", true);
+        $nextBtn.prop("disabled", true);
+        return;
+      }
+      highlightMatches(searchTerm);
+      currentMatchIndex = 0;
+      scrollToMatch(0);
+      updateSearchInfo();
+      $prevBtn.prop("disabled", false);
+      $nextBtn.prop("disabled", false);
+    }
+    function highlightMatches(searchTerm) {
+      let highlighted = "";
+      let lastIndex = 0;
+      matches.forEach((matchPos, idx) => {
+        highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
+        highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? "current" : ""}" data-match-idx="${idx}">`;
+        highlighted += escapeHtml(jsonString.substr(matchPos, searchTerm.length));
+        highlighted += "</mark>";
+        lastIndex = matchPos + searchTerm.length;
+      });
+      highlighted += escapeHtml(jsonString.substring(lastIndex));
+      $codeElement.html(highlighted);
+    }
+    function scrollToMatch(index) {
+      const $marks = $codeElement.find("mark");
+      $marks.removeClass("current");
+      if (index >= 0 && index < matches.length) {
+        const $currentMark = $marks.eq(index);
+        $currentMark.addClass("current");
+        const containerTop = $jsonContainer.get(0).scrollTop;
+        const containerHeight = $jsonContainer.get(0).clientHeight;
+        const markTop = $currentMark.get(0).offsetTop;
+        if (markTop < containerTop || markTop > containerTop + containerHeight - 100) {
+          $jsonContainer.get(0).scrollTop = markTop - 100;
+        }
+      }
+    }
+    function updateSearchInfo() {
+      if (matches.length > 0) {
+        $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
+      }
+    }
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    let searchTimeout;
+    $searchInput.on("input", function() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        performSearch((0, import_cash_dom.default)(this).val());
+      }, 300);
+    });
+    $prevBtn.on("click", () => {
+      if (matches.length > 0) {
+        currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
+        scrollToMatch(currentMatchIndex);
+        updateSearchInfo();
+        highlightMatches($searchInput.val());
+      }
+    });
+    $nextBtn.on("click", () => {
+      if (matches.length > 0) {
+        currentMatchIndex = (currentMatchIndex + 1) % matches.length;
+        scrollToMatch(currentMatchIndex);
+        updateSearchInfo();
+        highlightMatches($searchInput.val());
+      }
+    });
+    $searchInput.on("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          $prevBtn.trigger("click");
+        } else {
+          $nextBtn.trigger("click");
+        }
+      } else if (e.key === "Escape") {
+        $searchInput.val("");
+        performSearch("");
+      }
+    });
     const $copyBtn = (0, import_cash_dom.default)("<button>").text("Copy to Clipboard").addClass("s1-json-copy-btn").on("click", function() {
       const $btn = (0, import_cash_dom.default)(this);
       navigator.clipboard.writeText(jsonString).then(() => {
@@ -2032,9 +2146,10 @@
       URL.revokeObjectURL(url);
     });
     const $buttonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-button-container").append($copyBtn).append($downloadBtn);
-    const $modalContent = (0, import_cash_dom.default)("<div>").addClass("s1-json-modal-content").append($header).append($jsonContainer).append($buttonContainer);
+    const $modalContent = (0, import_cash_dom.default)("<div>").addClass("s1-json-modal-content").append($header).append($searchContainer).append($jsonContainer).append($buttonContainer);
     $modal.append($modalContent);
     (0, import_cash_dom.default)("body").append($modal);
+    setTimeout(() => $searchInput.focus(), 100);
     $modal.on("click", function(e) {
       if (e.target === this) {
         (0, import_cash_dom.default)(this).remove();

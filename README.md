@@ -72,9 +72,25 @@ See [BUILD.md](BUILD.md) for detailed build instructions.
 
 4. **View, Copy, or Download**
    - View the formatted JSON in the modal
+   - Use the search bar to find specific properties or values
    - Click "Copy to Clipboard" to copy the JSON
    - Click "Download JSON" to save as a file
    - Press ESC or click outside to close the modal
+
+### Search Feature
+
+The JSON modal includes a powerful search feature:
+
+- **Search bar**: Type to search for any text in the JSON (case-insensitive)
+- **Match highlighting**: All matches are highlighted in yellow
+- **Current match**: The active match is highlighted with a border
+- **Match counter**: Shows "X of Y" matches found
+- **Navigation**: 
+  - Click ↑/↓ buttons to navigate between matches
+  - Press `Enter` to go to next match
+  - Press `Shift+Enter` to go to previous match
+  - Press `ESC` to clear search
+- **Auto-scroll**: Automatically scrolls to show the current match
 
 ## File Structure
 

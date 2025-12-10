@@ -428,6 +428,33 @@ function displayJSONModal(data) {
   
   const jsonString = JSON.stringify(data, null, 2);
   
+  // Create search bar
+  const $searchContainer = $('<div>').addClass('s1-json-search-container');
+  const $searchInput = $('<input>')
+    .attr('type', 'text')
+    .attr('placeholder', 'Search in JSON...')
+    .addClass('s1-json-search-input');
+  
+  const $searchInfo = $('<span>')
+    .addClass('s1-json-search-info')
+    .text('');
+  
+  const $searchNav = $('<div>').addClass('s1-json-search-nav');
+  const $prevBtn = $('<button>')
+    .text('↑')
+    .addClass('s1-json-search-nav-btn')
+    .attr('title', 'Previous match')
+    .prop('disabled', true);
+  
+  const $nextBtn = $('<button>')
+    .text('↓')
+    .addClass('s1-json-search-nav-btn')
+    .attr('title', 'Next match')
+    .prop('disabled', true);
+  
+  $searchNav.append($prevBtn).append($nextBtn);
+  $searchContainer.append($searchInput).append($searchInfo).append($searchNav);
+  
   // Build modal structure with cash-dom
   const $header = $('<div>').addClass('s1-json-modal-header')
     .append($('<h2>').text('Event JSON'))
@@ -441,11 +468,145 @@ function displayJSONModal(data) {
         })
     );
   
+  const $codeElement = $('<code>').text(jsonString);
   const $jsonContainer = $('<div>').addClass('s1-json-container')
     .append(
       $('<pre>').addClass('s1-json-pre')
-        .append($('<code>').text(jsonString))
+        .append($codeElement)
     );
+  
+  // Search functionality
+  let currentMatchIndex = -1;
+  let matches = [];
+  
+  function performSearch(searchTerm) {
+    // Reset highlighting
+    $codeElement.html(escapeHtml(jsonString));
+    matches = [];
+    currentMatchIndex = -1;
+    
+    if (!searchTerm || searchTerm.length < 2) {
+      $searchInfo.text('');
+      $prevBtn.prop('disabled', true);
+      $nextBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Find all matches (case-insensitive)
+    const lowerJson = jsonString.toLowerCase();
+    const lowerSearch = searchTerm.toLowerCase();
+    let pos = 0;
+    
+    while ((pos = lowerJson.indexOf(lowerSearch, pos)) !== -1) {
+      matches.push(pos);
+      pos += searchTerm.length;
+    }
+    
+    if (matches.length === 0) {
+      $searchInfo.text('No matches');
+      $prevBtn.prop('disabled', true);
+      $nextBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Highlight all matches
+    highlightMatches(searchTerm);
+    currentMatchIndex = 0;
+    scrollToMatch(0);
+    updateSearchInfo();
+    $prevBtn.prop('disabled', false);
+    $nextBtn.prop('disabled', false);
+  }
+  
+  function highlightMatches(searchTerm) {
+    let highlighted = '';
+    let lastIndex = 0;
+    
+    matches.forEach((matchPos, idx) => {
+      highlighted += escapeHtml(jsonString.substring(lastIndex, matchPos));
+      highlighted += `<mark class="s1-json-search-highlight ${idx === currentMatchIndex ? 'current' : ''}" data-match-idx="${idx}">`;
+      highlighted += escapeHtml(jsonString.substr(matchPos, searchTerm.length));
+      highlighted += '</mark>';
+      lastIndex = matchPos + searchTerm.length;
+    });
+    
+    highlighted += escapeHtml(jsonString.substring(lastIndex));
+    $codeElement.html(highlighted);
+  }
+  
+  function scrollToMatch(index) {
+    const $marks = $codeElement.find('mark');
+    $marks.removeClass('current');
+    
+    if (index >= 0 && index < matches.length) {
+      const $currentMark = $marks.eq(index);
+      $currentMark.addClass('current');
+      
+      // Scroll to the match
+      const containerTop = $jsonContainer.get(0).scrollTop;
+      const containerHeight = $jsonContainer.get(0).clientHeight;
+      const markTop = $currentMark.get(0).offsetTop;
+      
+      if (markTop < containerTop || markTop > containerTop + containerHeight - 100) {
+        $jsonContainer.get(0).scrollTop = markTop - 100;
+      }
+    }
+  }
+  
+  function updateSearchInfo() {
+    if (matches.length > 0) {
+      $searchInfo.text(`${currentMatchIndex + 1} of ${matches.length}`);
+    }
+  }
+  
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // Search input event
+  let searchTimeout;
+  $searchInput.on('input', function() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      performSearch($(this).val());
+    }, 300);
+  });
+  
+  // Navigation buttons
+  $prevBtn.on('click', () => {
+    if (matches.length > 0) {
+      currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length;
+      scrollToMatch(currentMatchIndex);
+      updateSearchInfo();
+      highlightMatches($searchInput.val());
+    }
+  });
+  
+  $nextBtn.on('click', () => {
+    if (matches.length > 0) {
+      currentMatchIndex = (currentMatchIndex + 1) % matches.length;
+      scrollToMatch(currentMatchIndex);
+      updateSearchInfo();
+      highlightMatches($searchInput.val());
+    }
+  });
+  
+  // Keyboard shortcuts in search
+  $searchInput.on('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        $prevBtn.trigger('click');
+      } else {
+        $nextBtn.trigger('click');
+      }
+    } else if (e.key === 'Escape') {
+      $searchInput.val('');
+      performSearch('');
+    }
+  });
   
   const $copyBtn = $('<button>')
     .text('Copy to Clipboard')
@@ -481,11 +642,15 @@ function displayJSONModal(data) {
   const $modalContent = $('<div>')
     .addClass('s1-json-modal-content')
     .append($header)
+    .append($searchContainer)
     .append($jsonContainer)
     .append($buttonContainer);
   
   $modal.append($modalContent);
   $('body').append($modal);
+  
+  // Focus search input
+  setTimeout(() => $searchInput.focus(), 100);
   
   // Close on outside click
   $modal.on('click', function(e) {
