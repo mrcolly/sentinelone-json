@@ -73,6 +73,7 @@ See [BUILD.md](BUILD.md) for detailed build instructions.
 4. **View, Copy, or Download**
    - View the formatted JSON in the modal
    - Use the search bar to find specific properties or values
+   - Click "🔄 Parse JSON Strings" to automatically expand JSON string values into objects
    - Click "Copy to Clipboard" to copy the JSON
    - Click "Download JSON" to save as a file
    - Press ESC or click outside to close the modal
@@ -91,6 +92,29 @@ The JSON modal includes a powerful search feature:
   - Press `Shift+Enter` to go to previous match
   - Press `ESC` to clear search
 - **Auto-scroll**: Automatically scrolls to show the current match
+
+### JSON String Parsing
+
+Some API responses contain JSON as string values. The extension can automatically parse these:
+
+- **Toggle button**: Click "🔄 Parse JSON Strings" to enable/disable
+- **Auto-detection**: Detects strings that start with `[` or `{`
+- **Recursive parsing**: Parses nested JSON strings at any depth
+- **Visual feedback**: Button changes to "✓ JSON Strings Parsed" when active
+
+**Example:**
+```json
+// Before parsing:
+"experiments": "[{\"reference\":\"test\",\"variate\":\"enabled\"}]"
+
+// After parsing:
+"experiments": [
+  {
+    "reference": "test",
+    "variate": "enabled"
+  }
+]
+```
 
 ## File Structure
 

@@ -1828,11 +1828,35 @@
       alert("Could not find event properties. Please make sure an event is open.");
       return;
     }
-    const nestedProperties = convertToNestedObject(allProperties);
-    eventData.properties = nestedProperties;
-    displayJSONModal(eventData);
+    displayJSONModal(eventData, allProperties);
   }
-  function convertToNestedObject(flatObj) {
+  function tryParseJSON(value) {
+    if (typeof value !== "string")
+      return value;
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
+      return value;
+    }
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  function parseJSONStrings(obj) {
+    if (typeof obj !== "object" || obj === null) {
+      return tryParseJSON(obj);
+    }
+    if (Array.isArray(obj)) {
+      return obj.map((item) => parseJSONStrings(item));
+    }
+    const result = {};
+    Object.entries(obj).forEach(([key, value]) => {
+      result[key] = parseJSONStrings(value);
+    });
+    return result;
+  }
+  function convertToNestedObject(flatObj, parseJSON = false) {
     const result = {};
     Object.entries(flatObj).forEach(([key, value]) => {
       if (key.includes("..."))
@@ -1842,6 +1866,9 @@
         set_default(result, cleanKey, value);
       }
     });
+    if (parseJSON) {
+      return parseJSONStrings(result);
+    }
     return result;
   }
   function findSection(sectionName) {
@@ -2004,10 +2031,11 @@
     div.textContent = text;
     return div.innerHTML;
   }
-  function createSearchFunctionality(jsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
+  function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
     let currentMatchIndex = -1;
     let matches = [];
     function highlightMatches(searchTerm) {
+      const jsonString = getJsonString();
       let highlighted = "";
       let lastIndex = 0;
       matches.forEach((matchPos, idx) => {
@@ -2054,6 +2082,7 @@
       highlightMatches($searchInput.val());
     }
     function performSearch(searchTerm) {
+      const jsonString = getJsonString();
       $codeElement.html(escapeHtml(jsonString));
       matches = [];
       currentMatchIndex = -1;
@@ -2088,7 +2117,7 @@
       navigateToMatch
     };
   }
-  function displayJSONModal(data) {
+  function displayJSONModal(eventData, flatProperties) {
     const $existing = (0, import_cash_dom.default)("#s1-json-modal");
     if ($existing.length) {
       $existing.remove();
@@ -2097,7 +2126,13 @@
     }
     jsonModalOpen = true;
     const $modal = (0, import_cash_dom.default)("<div>").attr("id", "s1-json-modal").addClass("s1-json-modal");
-    const jsonString = JSON.stringify(data, null, 2);
+    let parseJSONStrings2 = false;
+    function getJSONData() {
+      const data = { ...eventData };
+      data.properties = convertToNestedObject(flatProperties, parseJSONStrings2);
+      return data;
+    }
+    let jsonString = JSON.stringify(getJSONData(), null, 2);
     const $searchContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-search-container");
     const $searchInput = (0, import_cash_dom.default)("<input>").attr("type", "text").attr("placeholder", "Search in JSON...").addClass("s1-json-search-input");
     const $searchInfo = (0, import_cash_dom.default)("<span>").addClass("s1-json-search-info").text("");
@@ -2117,7 +2152,7 @@
       (0, import_cash_dom.default)("<pre>").addClass("s1-json-pre").append($codeElement)
     );
     const search = createSearchFunctionality(
-      jsonString,
+      () => jsonString,
       $codeElement,
       $jsonContainer,
       $searchInfo,
@@ -2147,6 +2182,23 @@
         search.performSearch("");
       }
     });
+    const $parseToggle = (0, import_cash_dom.default)("<button>").text("\u{1F504} Parse JSON Strings").addClass("s1-json-parse-btn").attr("title", "Automatically parse JSON strings into objects").on("click", function() {
+      const $btn = (0, import_cash_dom.default)(this);
+      parseJSONStrings2 = !parseJSONStrings2;
+      if (parseJSONStrings2) {
+        $btn.text("\u2713 JSON Strings Parsed");
+        $btn.addClass("active");
+      } else {
+        $btn.text("\u{1F504} Parse JSON Strings");
+        $btn.removeClass("active");
+      }
+      jsonString = JSON.stringify(getJSONData(), null, 2);
+      $codeElement.text(jsonString);
+      const searchTerm = $searchInput.val();
+      if (searchTerm && searchTerm.length >= MIN_SEARCH_LENGTH) {
+        search.performSearch(searchTerm);
+      }
+    });
     const $copyBtn = (0, import_cash_dom.default)("<button>").text("Copy to Clipboard").addClass("s1-json-copy-btn").on("click", function() {
       const $btn = (0, import_cash_dom.default)(this);
       navigator.clipboard.writeText(jsonString).then(() => {
@@ -2162,11 +2214,14 @@
       $a.click();
       URL.revokeObjectURL(url);
     });
-    const $buttonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-button-container").append($copyBtn).append($downloadBtn);
+    const $buttonContainer = (0, import_cash_dom.default)("<div>").addClass("s1-json-button-container").append($parseToggle).append($copyBtn).append($downloadBtn);
     const $modalContent = (0, import_cash_dom.default)("<div>").addClass("s1-json-modal-content").append($header).append($searchContainer).append($jsonContainer).append($buttonContainer);
     $modal.append($modalContent);
     (0, import_cash_dom.default)("body").append($modal);
-    setTimeout(() => $searchInput.focus(), 100);
+    setTimeout(() => {
+      var _a;
+      return (_a = $searchInput.get(0)) == null ? void 0 : _a.focus();
+    }, 100);
     $modal.on("click", function(e) {
       if (e.target === this) {
         (0, import_cash_dom.default)(this).remove();

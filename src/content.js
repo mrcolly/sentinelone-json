@@ -132,19 +132,54 @@ function extractAndShowJSON() {
     return;
   }
   
-  // Convert flat properties to nested structure using lodash
-  const nestedProperties = convertToNestedObject(allProperties);
-  eventData.properties = nestedProperties;
+  // Show JSON in modal (with flat properties for optional parsing)
+  displayJSONModal(eventData, allProperties);
+}
+
+/**
+ * Try to parse a JSON string value
+ */
+function tryParseJSON(value) {
+  if (typeof value !== 'string') return value;
   
-  // Show JSON in modal
-  displayJSONModal(eventData);
+  // Check if it looks like JSON (starts with [ or {)
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+    return value;
+  }
+  
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Recursively parse JSON strings in an object
+ */
+function parseJSONStrings(obj) {
+  if (typeof obj !== 'object' || obj === null) {
+    return tryParseJSON(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => parseJSONStrings(item));
+  }
+  
+  const result = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    result[key] = parseJSONStrings(value);
+  });
+  
+  return result;
 }
 
 /**
  * Converts flat dot-notation object to nested structure
  * Uses lodash.set for clean implementation
  */
-function convertToNestedObject(flatObj) {
+function convertToNestedObject(flatObj, parseJSON = false) {
   const result = {};
   
   Object.entries(flatObj).forEach(([key, value]) => {
@@ -162,6 +197,11 @@ function convertToNestedObject(flatObj) {
       set(result, cleanKey, value);
     }
   });
+  
+  // Parse JSON strings if requested
+  if (parseJSON) {
+    return parseJSONStrings(result);
+  }
   
   return result;
 }
@@ -426,11 +466,12 @@ function escapeHtml(text) {
 /**
  * Create search functionality for JSON modal
  */
-function createSearchFunctionality(jsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
+function createSearchFunctionality(getJsonString, $codeElement, $jsonContainer, $searchInfo, $prevBtn, $nextBtn, $searchInput) {
   let currentMatchIndex = -1;
   let matches = [];
   
   function highlightMatches(searchTerm) {
+    const jsonString = getJsonString();
     let highlighted = '';
     let lastIndex = 0;
     
@@ -487,6 +528,8 @@ function createSearchFunctionality(jsonString, $codeElement, $jsonContainer, $se
   }
   
   function performSearch(searchTerm) {
+    const jsonString = getJsonString();
+    
     // Reset highlighting
     $codeElement.html(escapeHtml(jsonString));
     matches = [];
@@ -531,7 +574,7 @@ function createSearchFunctionality(jsonString, $codeElement, $jsonContainer, $se
   };
 }
 
-function displayJSONModal(data) {
+function displayJSONModal(eventData, flatProperties) {
   // Remove existing modal if any
   const $existing = $('#s1-json-modal');
   if ($existing.length) {
@@ -547,7 +590,16 @@ function displayJSONModal(data) {
     .attr('id', 's1-json-modal')
     .addClass('s1-json-modal');
   
-  const jsonString = JSON.stringify(data, null, 2);
+  // State for JSON parsing
+  let parseJSONStrings = false;
+  
+  function getJSONData() {
+    const data = { ...eventData };
+    data.properties = convertToNestedObject(flatProperties, parseJSONStrings);
+    return data;
+  }
+  
+  let jsonString = JSON.stringify(getJSONData(), null, 2);
   
   // Create search bar
   const $searchContainer = $('<div>').addClass('s1-json-search-container');
@@ -598,7 +650,7 @@ function displayJSONModal(data) {
   
   // Initialize search functionality
   const search = createSearchFunctionality(
-    jsonString, 
+    () => jsonString, 
     $codeElement, 
     $jsonContainer, 
     $searchInfo, 
@@ -635,6 +687,34 @@ function displayJSONModal(data) {
     }
   });
   
+  const $parseToggle = $('<button>')
+    .text('🔄 Parse JSON Strings')
+    .addClass('s1-json-parse-btn')
+    .attr('title', 'Automatically parse JSON strings into objects')
+    .on('click', function() {
+      const $btn = $(this);
+      parseJSONStrings = !parseJSONStrings;
+      
+      // Update button state
+      if (parseJSONStrings) {
+        $btn.text('✓ JSON Strings Parsed');
+        $btn.addClass('active');
+      } else {
+        $btn.text('🔄 Parse JSON Strings');
+        $btn.removeClass('active');
+      }
+      
+      // Regenerate JSON with new parsing state
+      jsonString = JSON.stringify(getJSONData(), null, 2);
+      $codeElement.text(jsonString);
+      
+      // Re-run search if there's a search term
+      const searchTerm = $searchInput.val();
+      if (searchTerm && searchTerm.length >= MIN_SEARCH_LENGTH) {
+        search.performSearch(searchTerm);
+      }
+    });
+  
   const $copyBtn = $('<button>')
     .text('Copy to Clipboard')
     .addClass('s1-json-copy-btn')
@@ -663,6 +743,7 @@ function displayJSONModal(data) {
   
   const $buttonContainer = $('<div>')
     .addClass('s1-json-button-container')
+    .append($parseToggle)
     .append($copyBtn)
     .append($downloadBtn);
   
@@ -676,8 +757,8 @@ function displayJSONModal(data) {
   $modal.append($modalContent);
   $('body').append($modal);
   
-  // Focus search input
-  setTimeout(() => $searchInput.focus(), 100);
+  // Focus search input (get DOM element from cash-dom wrapper)
+  setTimeout(() => $searchInput.get(0)?.focus(), 100);
   
   // Close on outside click
   $modal.on('click', function(e) {
