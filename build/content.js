@@ -2365,8 +2365,13 @@
         e.preventDefault();
         search.navigateToMatch(e.shiftKey ? "prev" : "next");
       } else if (e.key === "Escape") {
-        $searchInput.val("");
-        search.performSearch("");
+        if ($searchInput.val()) {
+          $searchInput.val("");
+          search.performSearch("");
+        } else {
+          $modal.remove();
+          jsonModalOpen = false;
+        }
       }
     });
     const $parseToggle = (0, import_cash_dom.default)("<button>").text("\u{1F504} Parse JSON Strings").addClass("s1-json-parse-btn").attr("title", "Automatically parse JSON strings into objects").on("click", function() {

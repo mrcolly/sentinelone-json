@@ -993,8 +993,15 @@ function displayJSONModal(eventData, flatProperties) {
       e.preventDefault();
       search.navigateToMatch(e.shiftKey ? 'prev' : 'next');
     } else if (e.key === 'Escape') {
-      $searchInput.val('');
-      search.performSearch('');
+      if ($searchInput.val()) {
+        // First ESC: clear search
+        $searchInput.val('');
+        search.performSearch('');
+      } else {
+        // Second ESC (or search already empty): close modal
+        $modal.remove();
+        jsonModalOpen = false;
+      }
     }
   });
   
