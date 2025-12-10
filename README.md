@@ -13,34 +13,54 @@ A Chrome extension that adds a "See as JSON" button to SentinelOne event logs, a
 
 ## Development Setup
 
-This extension uses NPM packages (cash-dom, lodash-es) for cleaner code. You'll need to build it first:
+This extension uses NPM packages (cash-dom, lodash-es) bundled with esbuild for cleaner code.
+
+### First Time Setup
 
 ```bash
 # Install dependencies
 npm install
-
-# Build the extension
-npm run build
-
-# Or use watch mode for development
-npm run watch
 ```
 
-See [BUILD.md](BUILD.md) for detailed build instructions.
+### Building
+
+```bash
+# Build once
+npm run build
+
+# Watch mode (rebuilds on file changes)
+npm run watch
+
+# Or use the combined dev command
+npm run dev
+```
+
+### NPM Packages Used
+
+**Dependencies:**
+- **cash-dom** - Lightweight jQuery alternative for DOM manipulation (~6KB gzipped)
+- **lodash-es** - Utility library (we use `set` for nested objects)
+
+**Dev Dependencies:**
+- **esbuild** - Fast JavaScript bundler (~30ms build time)
+- **eslint** - JavaScript linter
+- **stylelint** - CSS linter
+- **prettier** - Code formatter
+
+### What Gets Built
+
+- **Source:** `src/content.js` (imports cash-dom, lodash-es)
+- **Output:** `build/content.js` (bundled, ready for Chrome)
 
 ## Installation
 
 ### Option 1: Install from Chrome Web Store
 *(Coming soon - not yet published)*
 
-### Option 2: Install as Unpacked Extension (Developer Mode)
+### Option 2: Install from ZIP File
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   ```
-
-   > **Note**: The build files are already included in the repository, so you don't need to rebuild unless you're modifying the code. If you do want to make changes, see the [Development Setup](#development-setup) section.
+1. **Extract the ZIP file**
+   - Extract `sentinelone-json.zip` to a folder on your computer
 
 2. **Open Chrome Extensions page**
    - Open Chrome and navigate to `chrome://extensions/`
@@ -51,12 +71,50 @@ See [BUILD.md](BUILD.md) for detailed build instructions.
 
 4. **Load the extension**
    - Click "Load unpacked"
-   - Select the `sentinelone-json` folder
+   - Select the extracted folder
    - The extension should now appear in your extensions list
 
 5. **Verify installation**
    - The extension icon should appear in your Chrome toolbar
    - Navigate to SentinelOne and open an event to test
+
+> **Note**: The extension includes pre-built files, so you can use it immediately. If you want to modify the source code in `src/content.js`, you'll need to run `npm install` and `npm run build`.
+
+### Option 3: Install from Repository (Developer Mode)
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd sentinelone-json
+   ```
+
+   > **Note**: The build files are already included in the repository, so you don't need to rebuild unless you're modifying the code. If you do want to make changes, see the [Development Setup](#development-setup) section.
+
+2. **Open Chrome Extensions page**
+   - Open Chrome and navigate to `chrome://extensions/`
+   - Or click: Menu (⋮) → More Tools → Extensions
+
+3. **Enable Developer Mode**
+   - Toggle the "Developer mode" switch in the top-right corner (it should turn blue)
+
+4. **Load the extension**
+   - Click "Load unpacked"
+   - Navigate to and select the `sentinelone-json` folder
+   - Click "Select" or "Open"
+
+5. **Verify installation**
+   - You should see "SentinelOne JSON Viewer" in your extensions list
+   - The extension should show as "Enabled"
+   - The extension icon should appear in your Chrome toolbar
+
+### Updating the Extension
+
+If you make changes to the extension files or pull new updates:
+
+1. Go to `chrome://extensions/`
+2. Find "SentinelOne JSON Viewer"
+3. Click the refresh icon (🔄) on the extension card
+4. Refresh any open SentinelOne tabs
 
 ## Usage
 
@@ -132,8 +190,6 @@ sentinelone-json/
 │   ├── icon16.svg/.png
 │   ├── icon48.svg/.png
 │   └── icon128.svg/.png
-├── BUILD.md            # Build instructions
-├── INSTALL.md          # Installation guide
 └── README.md           # This file
 ```
 
@@ -147,22 +203,67 @@ sentinelone-json/
 
 ## Troubleshooting
 
-### Button not appearing
-- Make sure you're on a SentinelOne page
-- Try refreshing the page
-- Open an event to trigger the button injection
+### Extension doesn't appear in Chrome
+- Make sure Developer Mode is enabled in `chrome://extensions/`
+- Try refreshing the Extensions page
+- Check that you selected the correct folder (the one containing `manifest.json`)
+- Verify all files are present in the extension folder
+
+### "Manifest file is missing or unreadable" error
+- Make sure you selected the `sentinelone-json` folder, not a parent folder
+- Verify that `manifest.json` exists in the selected folder
+
+### Button not appearing on SentinelOne
+- Make sure you're on a SentinelOne page (`*.sentinelone.net`)
+- Refresh the SentinelOne page
+- Open an event (click on an event in the list) to trigger the button injection
+- Check the browser console (F12) for any JavaScript errors
 
 ### JSON data is incomplete
 - The extension extracts visible data from the DOM
 - Some data might be lazy-loaded or hidden
 - Try scrolling through the event properties first
+- Make sure the event details panel is fully loaded
 
-### Extension not loading
-- Make sure you ran `npm install` and `npm run build`
-- Check that Developer Mode is enabled
-- Verify all files are in the correct location
+### Extension not loading after code changes
+- Make sure you ran `npm install` and `npm run build` after pulling updates
+- Go to `chrome://extensions/` and click the refresh icon (🔄) on the extension
+- Refresh any open SentinelOne tabs
 - Check the Chrome Extensions page for error messages
 - Look for build errors in the terminal
+
+### Uninstalling
+
+To remove the extension:
+
+1. Go to `chrome://extensions/`
+2. Find "SentinelOne JSON Viewer"
+3. Click "Remove"
+4. Confirm the removal
+
+## Creating a Distribution Package
+
+To create a distributable ZIP file:
+
+```bash
+# Make sure dependencies are installed
+npm install
+
+# Create the package
+npm run package
+```
+
+This will create `sentinelone-json.zip` containing:
+- `manifest.json` - Extension configuration
+- `styles.css` - Styling
+- `build/content.js` - Bundled code (pre-built)
+- `icons/` - All icon files
+- `src/content.js` - Source code
+- `README.md` - Documentation
+
+The ZIP file can be shared and installed using the [Install from ZIP File](#option-2-install-from-zip-file) instructions.
+
+> **Note**: The ZIP includes pre-built files, so it can be installed immediately without Node.js or NPM. The source code is included for reference and modification.
 
 ## Privacy & Security
 

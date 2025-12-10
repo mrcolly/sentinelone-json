@@ -12,7 +12,8 @@
     "lint:fix": "eslint src/content.js --fix && stylelint styles.css --fix",
     "format": "prettier --write \"**/*.{js,css,json,md}\"",
     "validate": "npm run lint && echo '✅ All checks passed!'",
-    "dev": "npm run build && npm run watch"
+    "dev": "npm run build && npm run watch",
+    "package": "npm run build && zip -r sentinelone-json.zip manifest.json styles.css build/ icons/ src/ README.md -x '*.DS_Store'"
   },
   "keywords": [
     "chrome-extension",
