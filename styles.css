@@ -203,10 +203,11 @@
   cursor: pointer;
   transition: all 0.2s;
   flex: 1;
-  min-height: 40px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
+  line-height: 1.2;
 }
 
 .s1-json-parse-btn {
