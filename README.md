@@ -173,24 +173,6 @@ This creates `sentinelone-json.zip` with all necessary files.
 - All processing happens locally
 - Only requires "activeTab" permission
 
-## Code Quality
-
-The codebase follows SonarQube standards:
-
-- ✅ **Low cognitive complexity** - Functions broken into small, focused units
-- ✅ **No magic numbers** - All constants are named and documented
-- ✅ **Modern APIs** - Uses TextEncoder/TextDecoder instead of deprecated unescape/escape
-- ✅ **Clean error handling** - Explicit catch blocks with documented intent
-- ✅ **No code duplication** - Common logic extracted into reusable functions
-- ✅ **Proper JSDoc comments** - All functions are documented
-
-Run linting:
-```bash
-npm run lint      # Check ESLint + Stylelint
-npm run lint:fix  # Auto-fix issues
-npm run validate  # Full validation
-```
-
 ## Version History
 
 ### 1.2.0
