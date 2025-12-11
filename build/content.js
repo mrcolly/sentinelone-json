@@ -2022,12 +2022,18 @@
   }
   function convertToNestedObject(flatObj, parseJSON = false) {
     const result = {};
-    Object.entries(flatObj).forEach(([key, value]) => {
-      if (key.includes("..."))
-        return;
+    const allKeys = Object.keys(flatObj).filter((key) => !key.includes("..."));
+    const keysToProcess = allKeys.filter((key) => {
+      const keyPrefix = key + ".";
+      const hasChildren = allKeys.some(
+        (otherKey) => otherKey !== key && otherKey.startsWith(keyPrefix)
+      );
+      return !hasChildren;
+    });
+    keysToProcess.forEach((key) => {
       const cleanKey = key.split(".").filter((segment) => segment.trim().length > 0).join(".");
       if (cleanKey && cleanKey.length > 0) {
-        set_default(result, cleanKey, value);
+        set_default(result, cleanKey, flatObj[key]);
       }
     });
     if (parseJSON) {

@@ -465,20 +465,34 @@ function parseJSONStrings(obj) {
 
 /**
  * Convert flat dot-notation object to nested structure
+ * Filters out parent keys when more specific child keys exist
+ * e.g., if both "source" and "source.c2c.version" exist, skip "source"
  */
 function convertToNestedObject(flatObj, parseJSON = false) {
   const result = {};
   
-  Object.entries(flatObj).forEach(([key, value]) => {
-    if (key.includes('...')) return;
-    
+  // Get all keys (excluding ellipsis keys)
+  const allKeys = Object.keys(flatObj).filter(key => !key.includes('...'));
+  
+  // Filter out parent keys if more specific child keys exist
+  const keysToProcess = allKeys.filter(key => {
+    const keyPrefix = key + '.';
+    // Check if any other key starts with this key followed by a dot
+    const hasChildren = allKeys.some(otherKey => 
+      otherKey !== key && otherKey.startsWith(keyPrefix)
+    );
+    return !hasChildren; // Skip keys that have children
+  });
+  
+  // Process remaining keys
+  keysToProcess.forEach(key => {
     const cleanKey = key
       .split('.')
       .filter(segment => segment.trim().length > 0)
       .join('.');
     
     if (cleanKey && cleanKey.length > 0) {
-      set(result, cleanKey, value);
+      set(result, cleanKey, flatObj[key]);
     }
   });
   
